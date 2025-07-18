@@ -1,0 +1,98 @@
+# Copyright 2025 The KubeLB Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: "2"
+run:
+  issues-exit-code: 1
+linters:
+  default: none
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - depguard
+    - durationcheck
+    - errcheck
+    - errname
+    - errorlint
+    - goconst
+    - gocritic
+    - gocyclo
+    - govet
+    - importas
+    - ineffassign
+    - loggercheck
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - predeclared
+    - promlinter
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+    - wastedassign
+    - whitespace
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: https://go.dev/doc/go1.16#ioutil
+    govet:
+      enable:
+        - nilness
+    tagliatelle:
+      case:
+        rules:
+          json: goCamel
+          yaml: goCamel
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - revive
+        path: _test\.go
+    paths:
+      - zz_generated.*.go
+      - hack
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  settings:
+    goimports:
+      local-prefixes:
+        - k8c.io/kubelb-cli
+  exclusions:
+    generated: lax
+    paths:
+      - zz_generated.*.go
+      - hack
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$
