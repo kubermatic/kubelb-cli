@@ -11,5 +11,3 @@ cover.out
 kubelb-*.tgz
 __debug*
 charts/*/charts
-.claude
-CLAUDE.md

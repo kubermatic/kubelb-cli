@@ -1,0 +1,3 @@
+[submodule "kubelb"]
+	path = kubelb
+	url = https://github.com/kubermatic/kubelb.git
