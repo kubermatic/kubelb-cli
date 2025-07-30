@@ -24,6 +24,26 @@ LDFLAGS := -ldflags "-X 'k8c.io/kubelb-cli/cmd.gitVersion=$(GIT_VERSION)' \
 	-X 'k8c.io/kubelb-cli/cmd.gitCommit=$(GIT_COMMIT)' \
 	-X 'k8c.io/kubelb-cli/cmd.buildDate=$(BUILD_DATE)'"
 
+.PHONY: fmt
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
+
+lint: ## Run golangci-lint against code.
+	golangci-lint run -v --timeout=5m
+
+yamllint:  ## Run yamllint against code.
+	yamllint -c .yamllint.conf .
+
+check-dependencies: ## Verify go.mod.
+	go mod verify
+
+go-mod-tidy:
+	go mod tidy
+
 .PHONY: all
 all: build
 
