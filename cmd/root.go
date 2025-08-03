@@ -26,7 +26,7 @@ import (
 
 	"k8c.io/kubelb-cli/internal/config"
 	"k8c.io/kubelb-cli/internal/constants"
-	kubelb "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
+	kubelbce "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -107,7 +107,8 @@ func createKubernetesClient(cfg *config.Config) (client.Client, error) {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
-	if err := kubelb.AddToScheme(scheme); err != nil {
+	// Add CE API types for tunnel and loadbalancer support
+	if err := kubelbce.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
 	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme})
@@ -144,6 +145,8 @@ func init() {
 	rootCmd.AddCommand(
 		versionCmd(),
 		loadbalancerCmd,
+		tunnelCmd,
+		exposeCmd(),
 		docsCmd(),
 	)
 }

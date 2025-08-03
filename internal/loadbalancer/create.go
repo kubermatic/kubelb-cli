@@ -25,7 +25,8 @@ import (
 
 	"k8c.io/kubelb-cli/internal/config"
 	"k8c.io/kubelb-cli/internal/constants"
-	kubelb "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
+	"k8c.io/kubelb-cli/internal/output"
+	kubelb "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,7 +96,7 @@ func parseEndpoints(endpointStr string) ([]kubelb.LoadBalancerEndpoints, []int32
 	parts := strings.Split(endpointStr, ",")
 
 	ipMap := make(map[string]bool)
-	portMap := make(map[int32]bool)
+	endpointPortMap := make(map[int32]bool)
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -114,7 +115,7 @@ func parseEndpoints(endpointStr string) ([]kubelb.LoadBalancerEndpoints, []int32
 		}
 
 		ipMap[host] = true
-		portMap[int32(port)] = true
+		endpointPortMap[int32(port)] = true
 	}
 
 	var addresses []kubelb.EndpointAddress
@@ -122,28 +123,33 @@ func parseEndpoints(endpointStr string) ([]kubelb.LoadBalancerEndpoints, []int32
 		addresses = append(addresses, kubelb.EndpointAddress{IP: ip})
 	}
 
-	var ports []int32
-	for port := range portMap {
-		ports = append(ports, port)
+	// Create endpoint ports that will be assigned to the endpoints
+	var endpointPorts []kubelb.EndpointPort
+	for port := range endpointPortMap {
+		portName := fmt.Sprintf("%d-tcp", port)
+		endpointPorts = append(endpointPorts, kubelb.EndpointPort{
+			Name:     portName,
+			Port:     port,
+			Protocol: corev1.ProtocolTCP,
+		})
 	}
-
+	specPorts := []int32{8080}
 	endpoints := []kubelb.LoadBalancerEndpoints{
 		{
 			Name:      constants.DefaultEndpointName,
 			Addresses: addresses,
+			Ports:     endpointPorts,
 		},
 	}
 
-	return endpoints, ports, nil
+	return endpoints, specPorts, nil
 }
 
 func generateLoadBalancer(name, namespace string, endpoints []kubelb.LoadBalancerEndpoints, ports []int32, lbType corev1.ServiceType, hasRoute bool, hostname string) *kubelb.LoadBalancer {
 	var lbPorts []kubelb.LoadBalancerPort
-	for i, port := range ports {
-		portName := fmt.Sprintf("port-%d", i+1)
-		if len(ports) == 1 {
-			portName = constants.DefaultPortName
-		}
+	for _, port := range ports {
+		// Use the same naming convention as endpoint ports
+		portName := fmt.Sprintf("%d-tcp", port)
 
 		lbPorts = append(lbPorts, kubelb.LoadBalancerPort{
 			Name:     portName,
@@ -209,7 +215,11 @@ func waitForLoadBalancer(ctx context.Context, k8s client.Client, cfg *config.Con
 		lb = &currentLB
 
 		if hasRoute {
-			if lb.Spec.Hostname != "" {
+			// Check if hostname status is fully populated
+			if lb.Status.Hostname != nil &&
+				lb.Status.Hostname.Hostname != "" &&
+				lb.Status.Hostname.DNSRecordCreated &&
+				lb.Status.Hostname.TLSEnabled {
 				return true, nil
 			}
 		}
@@ -229,11 +239,35 @@ func outputYAML(ctx context.Context, k8s client.Client, cfg *config.Config, name
 }
 
 func outputSummary(lb *kubelb.LoadBalancer) error {
-	fmt.Printf("✅ LoadBalancer '%s' created successfully\n", lb.Name)
+	fmt.Printf("\n✅ LoadBalancer '%s' created successfully\n", lb.Name)
 
-	if lb.Spec.Hostname != "" {
-		fmt.Printf("🌐 Route URL: https://%s\n", lb.Spec.Hostname)
-		fmt.Println("\nYour application will be accessible at the URL above once DNS propagation completes.")
+	// Display hostname from status if available
+	if lb.Status.Hostname != nil && lb.Status.Hostname.Hostname != "" {
+		protocol := "http"
+		if lb.Status.Hostname.TLSEnabled {
+			protocol = "https"
+		}
+		fullURL := fmt.Sprintf("%s://%s", protocol, lb.Status.Hostname.Hostname)
+		fmt.Printf("%s\n", output.FormatPublicURL(fullURL))
+
+		if lb.Status.Hostname.DNSRecordCreated {
+			fmt.Println("\nYour application is accessible at the URL above.")
+		} else {
+			fmt.Println("\nYour application will be accessible at the URL above once DNS propagation completes.")
+		}
+	}
+
+	// Display LoadBalancer ingress IPs if available
+	if lb.Spec.Type == corev1.ServiceTypeLoadBalancer && len(lb.Status.LoadBalancer.Ingress) > 0 {
+		fmt.Printf("\n📍 LoadBalancer IP(s):\n")
+		for _, ingress := range lb.Status.LoadBalancer.Ingress {
+			if ingress.IP != "" {
+				fmt.Printf("   - %s\n", ingress.IP)
+			}
+			if ingress.Hostname != "" {
+				fmt.Printf("   - %s\n", ingress.Hostname)
+			}
+		}
 	}
 
 	fmt.Printf("\nUse 'kubelb lb get %s' to see the full resource details.\n", lb.Name)

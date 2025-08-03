@@ -20,8 +20,8 @@ import "time"
 
 const (
 	// Timeout constants
-	DefaultWaitTimeout     = 30 * time.Second
-	DefaultPollInterval    = 2 * time.Second
+	DefaultWaitTimeout     = 4 * time.Minute
+	DefaultPollInterval    = 3 * time.Second
 	ProgressTickerInterval = 500 * time.Millisecond
 
 	// CLI constants
