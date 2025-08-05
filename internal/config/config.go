@@ -19,6 +19,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"k8s.io/client-go/rest"
@@ -27,9 +28,10 @@ import (
 
 // Config holds the configuration for the KubeLB CLI
 type Config struct {
-	KubeConfig      string
-	Tenant          string
-	TenantNamespace string
+	KubeConfig         string
+	Tenant             string
+	TenantNamespace    string
+	InsecureSkipVerify bool
 }
 
 // LoadConfig loads configuration from flags, environment variables, and defaults
@@ -47,6 +49,12 @@ func LoadConfig(kubeconfigFlag, tenantFlag string) (*Config, error) {
 		return nil, fmt.Errorf("failed to resolve tenant: %w", err)
 	}
 	cfg.TenantNamespace = GetTenantNamespace(cfg.Tenant)
+
+	// Read InsecureSkipVerify from environment variable
+	cfg.InsecureSkipVerify, err = resolveInsecureSkipVerify()
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve insecure skip verify: %w", err)
+	}
 
 	return cfg, nil
 }
@@ -81,6 +89,22 @@ func resolveTenant(flagValue string) (string, error) {
 
 	// 3. No tenant specified - this is an error for commands that require it
 	return "", fmt.Errorf("tenant name is required: use --tenant flag or TENANT_NAME environment variable")
+}
+
+// resolveInsecureSkipVerify resolves the InsecureSkipVerify setting from environment variable
+func resolveInsecureSkipVerify() (bool, error) {
+	// Read from KUBELB_INSECURE_SKIP_VERIFY environment variable
+	envValue := os.Getenv("KUBELB_INSECURE_SKIP_VERIFY")
+	if envValue == "" {
+		return false, nil // Default to secure behavior
+	}
+
+	value, err := strconv.ParseBool(envValue)
+	if err != nil {
+		return false, fmt.Errorf("invalid value for KUBELB_INSECURE_SKIP_VERIFY: %q (must be true/false)", envValue)
+	}
+
+	return value, nil
 }
 
 // CreateKubernetesConfig creates a Kubernetes REST config from the resolved configuration

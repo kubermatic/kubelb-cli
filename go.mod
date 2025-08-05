@@ -5,6 +5,7 @@ go 1.24.5
 require (
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/spf13/cobra v1.9.1
+	golang.org/x/net v0.42.0
 	k8c.io/kubelb v1.1.2-0.20250729122542-a80e46e85707
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
@@ -39,7 +40,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/term v0.33.0 // indirect
@@ -59,4 +59,4 @@ require (
 
 replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911
 
-replace k8c.io/kubelb => /Users/waleedmalik/go/src/k8c.io/kubelb-ce
+replace k8c.io/kubelb => ./kubelb
