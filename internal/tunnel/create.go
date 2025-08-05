@@ -121,7 +121,7 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 
 		// Wait for tunnel to be ready
 		fmt.Printf("Waiting for tunnel to be ready...\n")
-		if err := waitForTunnelReady(ctx, k8s, cfg.TenantNamespace, opts.Name); err != nil {
+		if err := waitForTunnelReady(ctx, k8s, cfg.TenantNamespace, opts.Name, opts.Connect); err != nil {
 			return fmt.Errorf("tunnel creation failed: %w", err)
 		}
 
@@ -133,9 +133,10 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 			return fmt.Errorf("failed to get tunnel status: %w", err)
 		}
 
-		// Display tunnel information based on output format
-		if err := displayTunnel(tunnel, opts.Output); err != nil {
-			return fmt.Errorf("failed to display tunnel: %w", err)
+		if !opts.Connect {
+			if err := displayTunnel(tunnel, opts.Output); err != nil {
+				return fmt.Errorf("failed to display tunnel: %w", err)
+			}
 		}
 
 		// Wait for connection to complete or timeout
@@ -161,7 +162,7 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 	case opts.Wait:
 		// Just wait without connecting
 		fmt.Printf("Waiting for tunnel to be ready...\n")
-		if err := waitForTunnelReady(ctx, k8s, cfg.TenantNamespace, opts.Name); err != nil {
+		if err := waitForTunnelReady(ctx, k8s, cfg.TenantNamespace, opts.Name, opts.Connect); err != nil {
 			return fmt.Errorf("tunnel creation failed: %w", err)
 		}
 
@@ -187,7 +188,7 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 }
 
 // waitForTunnelReady waits for the tunnel to be ready with progressive status updates
-func waitForTunnelReady(ctx context.Context, k8s client.Client, namespace, name string) error {
+func waitForTunnelReady(ctx context.Context, k8s client.Client, namespace, name string, quiet bool) error {
 	var lastStatus string
 	var lastHostname string
 	var lastURL string
@@ -208,29 +209,36 @@ func waitForTunnelReady(ctx context.Context, k8s client.Client, namespace, name 
 			lastHostname = tunnel.Status.Hostname
 		}
 
-		// Show URL availability progress
+		// Show URL availability progress (skip in quiet mode)
 		if tunnel.Status.URL != "" && tunnel.Status.URL != lastURL {
-			fmt.Printf("✓ URL available\n")
-			fmt.Printf("%s\n", output.FormatPublicURL(tunnel.Status.URL))
+			if !quiet {
+				fmt.Printf("✓ URL ready\n")
+			}
 			lastURL = tunnel.Status.URL
 		}
 
-		// Show phase changes
+		// Show phase changes (skip success states in quiet mode, always show failures)
 		currentStatus := string(tunnel.Status.Phase)
 		if currentStatus != lastStatus {
 			switch tunnel.Status.Phase {
 			case kubelbce.TunnelPhasePending:
-				fmt.Printf("⏳ Tunnel provisioning...\n")
+				if !quiet {
+					fmt.Printf("⏳ Tunnel provisioning...\n")
+				}
 			case kubelbce.TunnelPhaseReady:
-				fmt.Printf("✓ Tunnel ready\n")
+				if !quiet {
+					fmt.Printf("✓ Tunnel ready\n")
+				}
 			case kubelbce.TunnelPhaseFailed:
-				fmt.Printf("✗ Tunnel failed\n")
+				fmt.Printf("✗ Tunnel failed\n") // Always show failures
 			}
 			lastStatus = currentStatus
 		}
 
-		// Show conditions progress
-		showConditionsProgress(tunnel.Status.Conditions, shownConditions)
+		// Show conditions progress (skip in quiet mode)
+		if !quiet {
+			showConditionsProgress(tunnel.Status.Conditions, shownConditions)
+		}
 
 		// Check tunnel status
 		switch tunnel.Status.Phase {

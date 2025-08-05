@@ -90,10 +90,12 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 		fmt.Printf("   ⚠️  TLS verification disabled\n")
 	}
 
-	// Handle Ctrl+C gracefully
-	ctx, cancel := context.WithCancel(ctx)
+	// Create a fresh context for the long-running tunnel connection
+	// Don't inherit timeout from the parent context to avoid 4-minute death sentence
+	tunnelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Handle Ctrl+C gracefully
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -102,7 +104,7 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 		cancel()
 	}()
 
-	return client.EstablishTunnel(ctx)
+	return client.EstablishTunnel(tunnelCtx)
 }
 
 // HTTPRequest represents an incoming HTTP request to be forwarded
@@ -456,6 +458,10 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 	}
 
 	if err := scanner.Err(); err != nil {
+		// Don't return error for graceful shutdown
+		if errors.Is(err, context.Canceled) {
+			return context.Canceled
+		}
 		return fmt.Errorf("error reading SSE stream: %w", err)
 	}
 
