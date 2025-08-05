@@ -20,7 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/spf13/cobra"
@@ -213,6 +215,22 @@ func runTunnelGet(cmd *cobra.Command, args []string) error {
 }
 
 func runTunnelCreate(cmd *cobra.Command, opts tunnel.CreateOptions) error {
+	// If connecting (like expose command), use signal context for graceful Ctrl+C handling
+	if opts.Connect {
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+
+		err := tunnel.Create(ctx, k8sClient, cfg, opts)
+
+		// Don't show usage help when user gracefully cancels with Ctrl+C
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+
+		return err
+	}
+
+	// For non-connecting operations, use the command context
 	return tunnel.Create(cmd.Context(), k8sClient, cfg, opts)
 }
 
@@ -220,8 +238,13 @@ func runTunnelDelete(cmd *cobra.Command, args []string, force bool) error {
 	return tunnel.Delete(cmd.Context(), k8sClient, cfg, args[0], force)
 }
 
-func runTunnelConnect(cmd *cobra.Command, tunnelName string, port int) error {
-	err := tunnel.Connect(cmd.Context(), k8sClient, cfg, tunnelName, port)
+func runTunnelConnect(_ *cobra.Command, tunnelName string, port int) error {
+	// Create a separate context for tunnel connections that isn't bound by command timeout
+	// Use context.Background() with signal handling instead of cmd.Context() which has the 4-minute timeout
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	err := tunnel.Connect(ctx, k8sClient, cfg, tunnelName, port)
 
 	// Don't show usage help when user gracefully cancels with Ctrl+C
 	if errors.Is(err, context.Canceled) {
