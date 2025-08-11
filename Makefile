@@ -76,3 +76,14 @@ run-version: build
 update-docs:
 	@echo "Updating docs..."
 	./$(BUILD_DIR)/$(BINARY_NAME) docs --output=./docs/cli
+
+
+.PHONY: snapshot
+snapshot: ## Create a snapshot release with goreleaser
+	@echo "Creating snapshot release..."
+	goreleaser release --snapshot --clean
+
+.PHONY: release
+release: ## Create a production release with goreleaser
+	@echo "Creating production release..."
+	goreleaser release --clean
