@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"k8c.io/kubelb-cli/internal/constants"
-	kubelb "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
+	kubelb "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -23,8 +23,10 @@ import (
 	"time"
 
 	"k8c.io/kubelb-cli/internal/config"
+	"k8c.io/kubelb-cli/internal/logger"
 	"k8c.io/kubelb-cli/internal/output"
-	kubelbce "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
+	"k8c.io/kubelb-cli/internal/ui"
+	kubelbce "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +36,19 @@ import (
 )
 
 func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts CreateOptions) error {
+	log := logger.WithTunnel(opts.Name).WithOperation("create")
+
+	log.Info("starting tunnel creation",
+		"tunnel_name", opts.Name,
+		"port", opts.Port,
+		"hostname", opts.Hostname,
+		"tenant", cfg.TenantNamespace,
+		"wait", opts.Wait,
+		"connect", opts.Connect,
+	)
+
 	if opts.Port <= 0 || opts.Port > 65535 {
+		log.Error("invalid port specified", "port", opts.Port)
 		return fmt.Errorf("invalid port: %d (must be between 1 and 65535)", opts.Port)
 	}
 
@@ -46,6 +60,9 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 	// If no explicit hostname provided, request wildcard domain for dynamic assignment
 	if opts.Hostname == "" {
 		annotations["kubelb.k8c.io/request-wildcard-domain"] = "true"
+		log.Debug("requesting wildcard domain for dynamic hostname assignment")
+	} else {
+		log.Debug("using explicit hostname", "hostname", opts.Hostname)
 	}
 
 	tunnel := &kubelbce.Tunnel{
@@ -63,7 +80,8 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 		},
 	}
 
-	fmt.Printf("Creating tunnel %s...\n", opts.Name)
+	ui.Progress("Creating tunnel %s...", opts.Name)
+	log.Debug("tunnel resource configured", "annotations_count", len(annotations))
 
 	// Check if tunnel already exists
 	existingTunnel := &kubelbce.Tunnel{}
@@ -75,16 +93,21 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 	switch {
 	case err == nil:
 		// Tunnel already exists
-		fmt.Printf("✓ Tunnel %s already exists\n", opts.Name)
+		log.Info("tunnel already exists, using existing resource")
+		ui.Success("Tunnel %s already exists", opts.Name)
 		tunnel = existingTunnel
 	case !apierrors.IsNotFound(err):
+		log.Error("failed to check existing tunnel", "error", err)
 		return fmt.Errorf("failed to check existing tunnel: %w", err)
 	default:
 		// Tunnel doesn't exist, create it
+		log.Debug("creating new tunnel resource")
 		if err := k8s.Create(ctx, tunnel); err != nil {
+			log.Error("failed to create tunnel", "error", err)
 			return fmt.Errorf("failed to create tunnel: %w", err)
 		}
-		fmt.Printf("✓ Tunnel %s created\n", opts.Name)
+		log.Info("tunnel resource created successfully")
+		ui.Success("Tunnel %s created", opts.Name)
 	}
 
 	// If connecting, start connection process in parallel with waiting
