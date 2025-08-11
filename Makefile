@@ -96,3 +96,7 @@ verify-boilerplate:  ## Run verify-boilerplate code.
 
 verify-imports:  ## Run verify-imports code.
 	./hack/verify-import-order.sh
+
+.PHONY: shfmt
+shfmt:
+	shfmt -w -sr -i 2 hack
