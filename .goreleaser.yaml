@@ -75,5 +75,5 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-sboms:
-  - artifacts: archive
+# sboms:
+#   - artifacts: archive
