@@ -1,6 +1,6 @@
 module k8c.io/kubelb-cli
 
-go 1.24.5
+go 1.24.4
 
 require (
 	github.com/MakeNowJust/heredoc v1.0.0

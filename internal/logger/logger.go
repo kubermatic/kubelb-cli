@@ -41,6 +41,9 @@ const (
 	LevelDebug
 	// LevelTrace logs all messages including trace-level debugging
 	LevelTrace
+
+	// String constants for log levels
+	levelInfoString = "info"
 )
 
 // String returns the string representation of the logging level.
@@ -51,13 +54,13 @@ func (l Level) String() string {
 	case LevelWarn:
 		return "warn"
 	case LevelInfo:
-		return "info"
+		return levelInfoString
 	case LevelDebug:
 		return "debug"
 	case LevelTrace:
 		return "trace"
 	default:
-		return "info"
+		return levelInfoString
 	}
 }
 
@@ -203,7 +206,7 @@ func (l *Logger) WithContext(ctx context.Context) *Logger {
 	defer l.mu.RUnlock()
 
 	return &Logger{
-		Logger: l.Logger.With(contextFields(ctx)...),
+		Logger: l.With(contextFields(ctx)...),
 		config: l.config,
 	}
 }
@@ -214,7 +217,7 @@ func (l *Logger) WithOperation(operation string) *Logger {
 	defer l.mu.RUnlock()
 
 	return &Logger{
-		Logger: l.Logger.With("operation", operation),
+		Logger: l.With("operation", operation),
 		config: l.config,
 	}
 }
@@ -225,7 +228,7 @@ func (l *Logger) WithTunnel(name string) *Logger {
 	defer l.mu.RUnlock()
 
 	return &Logger{
-		Logger: l.Logger.With("tunnel", name),
+		Logger: l.With("tunnel", name),
 		config: l.config,
 	}
 }
@@ -236,7 +239,7 @@ func (l *Logger) WithFields(fields ...any) *Logger {
 	defer l.mu.RUnlock()
 
 	return &Logger{
-		Logger: l.Logger.With(fields...),
+		Logger: l.With(fields...),
 		config: l.config,
 	}
 }

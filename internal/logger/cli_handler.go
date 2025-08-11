@@ -47,7 +47,7 @@ func (h *CLIHandler) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 // Handle handles the Record.
-func (h *CLIHandler) Handle(ctx context.Context, r slog.Record) error {
+func (h *CLIHandler) Handle(_ context.Context, r slog.Record) error {
 	buf := make([]byte, 0, 1024)
 
 	// Add timestamp for debug and trace levels
