@@ -6,7 +6,7 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/net v0.42.0
-	k8c.io/kubelb v1.1.2-0.20250729122542-a80e46e85707
+	k8c.io/kubelb v1.1.2-0.20250808165140-5cb55b85e609
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.3
@@ -58,5 +58,3 @@ require (
 )
 
 replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911
-
-replace k8c.io/kubelb => /Users/waleedmalik/go/src/k8c.io/kubelb-ee
