@@ -41,53 +41,80 @@ import (
 	"golang.org/x/net/http2"
 
 	"k8c.io/kubelb-cli/internal/config"
+	"k8c.io/kubelb-cli/internal/logger"
 	"k8c.io/kubelb-cli/internal/output"
-	kubelbce "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
+	"k8c.io/kubelb-cli/internal/ui"
+	kubelbce "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelName string, port int) error {
+	log := logger.WithTunnel(tunnelName).WithOperation("connect")
+
+	log.Info("starting tunnel connection",
+		"tunnel", tunnelName,
+		"port", port,
+		"tenant", cfg.TenantNamespace,
+	)
+
 	if port <= 0 || port > 65535 {
+		log.Error("invalid port specified", "port", port)
 		return fmt.Errorf("invalid port: %d (must be between 1 and 65535)", port)
 	}
 
+	log.Debug("fetching tunnel resource from kubernetes")
 	tunnel := &kubelbce.Tunnel{}
 	if err := k8s.Get(ctx, client.ObjectKey{
 		Namespace: cfg.TenantNamespace,
 		Name:      tunnelName,
 	}, tunnel); err != nil {
 		if apierrors.IsNotFound(err) {
+			log.Error("tunnel not found", "tunnel", tunnelName, "namespace", cfg.TenantNamespace)
+			ui.Error("Tunnel %q not found", tunnelName)
 			return fmt.Errorf("tunnel %q not found", tunnelName)
 		}
+		log.Error("failed to get tunnel", "error", err)
 		return fmt.Errorf("failed to get tunnel: %w", err)
 	}
 
+	log.Debug("tunnel resource retrieved", "status", tunnel.Status.Phase, "url", tunnel.Status.URL)
+
 	if tunnel.Status.Phase != kubelbce.TunnelPhaseReady {
+		log.Warn("tunnel is not ready", "status", tunnel.Status.Phase)
+		ui.Error("Tunnel is not ready (status: %s)", tunnel.Status.Phase)
 		return fmt.Errorf("tunnel is not ready (status: %s)", tunnel.Status.Phase)
 	}
 
 	if tunnel.Status.ConnectionManagerURL == "" {
+		log.Error("connection manager URL not available")
+		ui.Error("Tunnel connection manager URL not available")
 		return fmt.Errorf("tunnel connection manager URL not available")
 	}
 
+	log.Debug("loading tunnel authentication")
 	// Load tunnel authentication
 	auth, err := LoadTunnelAuth(ctx, k8s, cfg.TenantNamespace, tunnelName)
 	if err != nil {
+		log.Error("failed to load tunnel auth", "error", err)
 		return fmt.Errorf("failed to load tunnel auth: %w", err)
 	}
 
+	log.Debug("creating tunnel client", "manager_url", tunnel.Status.ConnectionManagerURL)
 	client, err := NewClient(auth, tunnel.Status.ConnectionManagerURL, tunnelName, tunnel.Status.Hostname, cfg.TenantNamespace, fmt.Sprintf("%d", port), cfg.InsecureSkipVerify)
 	if err != nil {
+		log.Error("failed to create tunnel client", "error", err)
 		return fmt.Errorf("failed to create tunnel client: %w", err)
 	}
 	defer client.Close()
 
-	fmt.Printf("\n🔗 Tunnel Connection\n")
-	fmt.Printf("%s\n", output.FormatConnectionInfo(tunnel.Status.URL, fmt.Sprintf("%d", port)))
+	// Display connection information
+	ui.Header("Tunnel Connection")
+	ui.Info("%s", output.FormatConnectionInfo(tunnel.Status.URL, fmt.Sprintf("%d", port)))
 	if cfg.InsecureSkipVerify {
-		fmt.Printf("   ⚠️  TLS verification disabled\n")
+		ui.Warning("TLS verification disabled")
+		log.Warn("TLS verification disabled", "insecure_skip_verify", true)
 	}
 
 	// Create a fresh context for the long-running tunnel connection
@@ -100,10 +127,12 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
-		fmt.Printf("\n💔 Disconnecting tunnel...\n")
+		log.Info("received shutdown signal")
+		ui.Disconnection("Disconnecting tunnel...")
 		cancel()
 	}()
 
+	log.Info("establishing tunnel connection")
 	return client.EstablishTunnel(tunnelCtx)
 }
 
@@ -254,12 +283,24 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 	const baseDelay = 1 * time.Second
 	const maxDelay = 60 * time.Second
 
+	log := logger.WithTunnel(tc.tunnelName).WithOperation("establish_tunnel")
+
+	log.Info("starting tunnel establishment",
+		"max_retries", maxRetries,
+		"base_delay", baseDelay,
+		"max_delay", maxDelay,
+	)
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
+		attemptLog := log.WithFields("attempt", attempt+1, "max_retries", maxRetries)
+
 		// Check if we should stop retrying
 		select {
 		case <-ctx.Done():
+			attemptLog.Info("context cancelled, stopping tunnel establishment")
 			return ctx.Err()
 		case <-tc.shutdownCtx.Done():
+			attemptLog.Info("client shutdown requested, stopping tunnel establishment")
 			return fmt.Errorf("client shutdown")
 		default:
 		}
@@ -270,7 +311,8 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 		// Update connection state
 		if attempt == 0 {
 			atomic.StoreInt32(&tc.state, int32(StateConnecting))
-			fmt.Printf("🔄 Connecting to tunnel...\n")
+			ui.Progress("Connecting to tunnel...")
+			attemptLog.Debug("initial connection attempt")
 		} else {
 			atomic.StoreInt32(&tc.state, int32(StateReconnecting))
 			atomic.AddInt32(&tc.reconnectCount, 1)
@@ -285,55 +327,70 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 			jitter := time.Duration(rand.Float64() * float64(delay) * 0.5)
 			delay = delay - jitter/2 + time.Duration(rand.Float64()*float64(jitter))
 
-			fmt.Printf("🔄 Reconnection attempt %d/%d in %v...\n", attempt+1, maxRetries, delay.Round(time.Second))
+			attemptLog.Debug("calculating reconnection delay", "delay", delay, "jitter", jitter)
+			ui.Progress("Reconnection attempt %d/%d in %v...", attempt+1, maxRetries, delay.Round(time.Second))
 
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
+				attemptLog.Info("context cancelled during delay")
 				return ctx.Err()
 			case <-tc.shutdownCtx.Done():
+				attemptLog.Info("client shutdown during delay")
 				return fmt.Errorf("client shutdown")
 			}
 		}
 
 		// Attempt to establish connection
+		attemptLog.Debug("attempting to establish connection")
 		err := tc.establishSingleConnection(ctx)
 		if err == nil {
 			// This should never happen since handleSSEEvents blocks until error
+			attemptLog.Warn("establish single connection returned nil error unexpectedly")
 			return nil
 		}
 
 		// Check if this is a graceful shutdown (context canceled)
 		if errors.Is(err, context.Canceled) {
-			// Don't log error for graceful shutdown
+			attemptLog.Info("connection cancelled gracefully")
 			return err
 		}
 
 		// Log connection failure for actual errors
-		fmt.Printf("❌ Connection attempt %d failed: %v\n", attempt+1, err)
+		attemptLog.Warn("connection attempt failed", "error", err)
+		ui.Error("Connection attempt %d failed: %v", attempt+1, err)
 
 		// Check if error is non-recoverable
 		if tc.isNonRecoverableError(err) {
 			atomic.StoreInt32(&tc.state, int32(StateFailed))
+			attemptLog.Error("non-recoverable error encountered", "error", err)
 			return fmt.Errorf("non-recoverable error: %w", err)
 		}
 	}
 
 	// All retries exhausted
 	atomic.StoreInt32(&tc.state, int32(StateFailed))
+	log.Error("all retry attempts exhausted", "attempts", maxRetries)
+	ui.Error("Failed to establish tunnel after %d attempts", maxRetries)
 	return fmt.Errorf("failed to establish tunnel after %d attempts", maxRetries)
 }
 
 // establishSingleConnection attempts to create a single SSE connection
 func (tc *Client) establishSingleConnection(ctx context.Context) error {
+	log := logger.WithTunnel(tc.tunnelName).WithOperation("establish_single_connection")
+
 	connectURL := tc.baseURL + "/tunnel/connect"
+	log.Debug("creating SSE request", "url", connectURL)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", connectURL, nil)
 	if err != nil {
+		log.Error("failed to create SSE request", "error", err)
 		return fmt.Errorf("failed to create SSE request: %w", err)
 	}
 	authHeader := "Bearer " + tc.auth.Token
 
 	// Validate headers contain only valid HTTP header characters
+	log.Debug("validating HTTP headers")
 	if !isValidHTTPHeaderValue(authHeader) {
 		var invalidChars []rune
 		for _, c := range authHeader {
@@ -341,12 +398,15 @@ func (tc *Client) establishSingleConnection(ctx context.Context) error {
 				invalidChars = append(invalidChars, c)
 			}
 		}
+		log.Error("invalid characters in auth token", "invalid_chars", invalidChars, "token_length", len(tc.auth.Token))
 		return fmt.Errorf("invalid characters in auth token: %v (token length: %d)", invalidChars, len(tc.auth.Token))
 	}
 	if !isValidHTTPHeaderValue(tc.tunnelName) {
+		log.Error("invalid characters in tunnel name", "tunnel_name", tc.tunnelName)
 		return fmt.Errorf("invalid characters in tunnel name: %q", tc.tunnelName)
 	}
 	if !isValidHTTPHeaderValue(tc.tenantName) {
+		log.Error("invalid characters in tenant name", "tenant_name", tc.tenantName)
 		return fmt.Errorf("invalid characters in tenant name: %q", tc.tenantName)
 	}
 
@@ -358,22 +418,32 @@ func (tc *Client) establishSingleConnection(ctx context.Context) error {
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Cache-Control", "no-cache")
 
+	log.Debug("sending SSE connection request",
+		"hostname", tc.hostname,
+		"target_port", tc.targetPort,
+		"tunnel_name", tc.tunnelName,
+		"tenant_name", tc.tenantName,
+	)
+
 	// Make the request using SSE client (no timeout)
 	resp, err := tc.sseClient.Do(req)
 	if err != nil {
+		log.Error("failed to connect to tunnel server", "error", err, "url", connectURL)
 		return fmt.Errorf("failed to connect to tunnel server: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Error("tunnel connection failed", "status", resp.StatusCode, "body", string(body))
 		return fmt.Errorf("tunnel connection failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
 	// Connection successful - transition to connected state
 	atomic.StoreInt32(&tc.state, int32(StateConnected))
-	fmt.Printf("   ✅ Connected! Tunnel is ready to receive traffic\n")
-	fmt.Printf("   💡 Press Ctrl+C to disconnect\n\n")
+	log.Info("tunnel connection established successfully")
+	ui.Success("Connected! Tunnel is ready to receive traffic")
+	ui.Info("Press Ctrl+C to disconnect")
 
 	// Handle SSE events - this blocks until connection dies or context is cancelled
 	return tc.handleSSEEvents(ctx, resp.Body)
@@ -390,16 +460,22 @@ func (tc *Client) isNonRecoverableError(err error) bool {
 
 // handleSSEEvents handles incoming SSE events from the server
 func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
+	log := logger.WithTunnel(tc.tunnelName).WithOperation("handle_sse_events")
+	log.Info("starting SSE event handling")
+
 	scanner := bufio.NewScanner(body)
 
 	// Start connection health monitoring (server → client pings only)
 	go tc.monitorConnectionHealth(ctx)
 
+	eventCount := 0
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
+			log.Info("context cancelled, stopping SSE event handling")
 			return ctx.Err()
 		case <-tc.shutdownCtx.Done():
+			log.Info("client shutdown, stopping SSE event handling")
 			return fmt.Errorf("client shutdown")
 		default:
 		}
@@ -423,36 +499,40 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 			}
 			data := strings.TrimPrefix(dataLine, "data: ")
 
-			// Debug: Show all SSE events
-			// fmt.Printf("🔍 SSE Event: type=%q, data=%q\n", eventType, data[:minInt(50, len(data))])
+			eventCount++
+			eventLog := log.WithFields("event_type", eventType, "event_count", eventCount)
+
+			// Show all SSE events at trace level
+			eventLog.Debug("received SSE event", "data_preview", truncateString(data, 100))
 
 			// Handle different event types
 			switch eventType {
 			case "request":
-				// DEBUG: Show all request events
-				// fmt.Printf("📨 Received request event!\n")
+				eventLog.Debug("handling request event")
 				go tc.handleRequestEventWithTracking(data)
 			case "ping":
 				// Update last ping timestamp - proves server connection is alive
 				atomic.StoreInt64(&tc.lastPing, time.Now().Unix())
+				eventLog.Debug("received ping event", "data", data)
 
 				// Reduce noise: only log keepalive pings every minute (every 60th ping)
 				if strings.HasPrefix(data, "keepalive-") {
 					if pingCount := strings.TrimPrefix(data, "keepalive-"); pingCount != "" {
 						if num, _ := strconv.Atoi(pingCount); num%60 == 0 {
-							fmt.Printf("   🏓 Connection healthy (ping #%s)\n", pingCount)
+							ui.Health("Connection healthy (ping #%s)", pingCount)
+							eventLog.Info("connection health ping", "ping_count", num)
 						}
 					}
 				}
 			case "pong":
 				// Server acknowledgment - suppress this message to reduce noise
-				// if data == "auth-ack" { ... }
+				eventLog.Debug("received pong event", "data", data)
 			case "error":
-				fmt.Printf("   ❌ Server error: %s\n", data)
+				eventLog.Error("received error event from server", "error", data)
+				ui.Error("Server error: %s", data)
 				return fmt.Errorf("server error: %s", data)
 			default:
-				// Suppress unknown event types to reduce noise
-				// fmt.Printf("⚠️  Unknown event type: %s, data: %s\n", eventType, data)
+				eventLog.Warn("received unknown event type", "event_type", eventType, "data", data)
 			}
 		}
 	}
@@ -460,17 +540,23 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 	if err := scanner.Err(); err != nil {
 		// Don't return error for graceful shutdown
 		if errors.Is(err, context.Canceled) {
+			log.Info("scanner cancelled gracefully")
 			return context.Canceled
 		}
+		log.Error("error reading SSE stream", "error", err)
 		return fmt.Errorf("error reading SSE stream: %w", err)
 	}
 
+	log.Warn("SSE stream ended unexpectedly", "events_processed", eventCount)
 	return fmt.Errorf("SSE stream ended unexpectedly")
 }
 
 // monitorConnectionHealth monitors the health of the tunnel connection
 func (tc *Client) monitorConnectionHealth(ctx context.Context) {
 	const pingTimeout = 90
+
+	log := logger.WithTunnel(tc.tunnelName).WithOperation("monitor_connection_health")
+	log.Info("starting connection health monitoring", "ping_timeout_seconds", pingTimeout)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -481,41 +567,73 @@ func (tc *Client) monitorConnectionHealth(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("context cancelled, stopping health monitoring")
 			return
 		case <-tc.shutdownCtx.Done():
+			log.Info("client shutdown, stopping health monitoring")
 			return
 		case <-ticker.C:
 			now := time.Now().Unix()
 			lastPing := atomic.LoadInt64(&tc.lastPing)
+
+			log.Debug("health check", "last_ping_ago_seconds", now-lastPing)
+
 			// Check if reconnection was requested due to 404 errors
 			if atomic.LoadInt32(&tc.needsReconnect) == 1 {
-				fmt.Printf("   🔄 Connection lost, reconnecting...\n")
+				log.Warn("reconnection needed due to 404 errors")
+				ui.Progress("Connection lost, reconnecting...")
 				return
 			}
 
 			// Check if we haven't received a ping in too long (connection issue)
 			if lastPing > 0 && now-lastPing > pingTimeout {
-				fmt.Printf("   ⚠️  Connection timeout (%d seconds), reconnecting...\n", now-lastPing)
+				log.Warn("connection timeout detected", "seconds_since_last_ping", now-lastPing)
+				ui.Warning("Connection timeout (%d seconds), reconnecting...", now-lastPing)
 				// Connection is dead, trigger reconnection by returning
 				return
 			}
 		case <-healthLogTicker.C:
-			// Suppress periodic health logs to reduce noise
-			// Only show health when there are issues or reconnections
-			// state := ConnectionState(atomic.LoadInt32(&tc.state))
-			// reconnects := atomic.LoadInt32(&tc.reconnectCount)
-			// fmt.Printf("📊 Connection healthy (state: %s, reconnects: %d)\n", state, reconnects)
+			// Log periodic health status at debug level
+			state := ConnectionState(atomic.LoadInt32(&tc.state))
+			reconnects := atomic.LoadInt32(&tc.reconnectCount)
+			lastPing := atomic.LoadInt64(&tc.lastPing)
+			secondsSinceLastPing := time.Now().Unix() - lastPing
+
+			log.Debug("periodic health check",
+				"state", state.String(),
+				"reconnects", reconnects,
+				"seconds_since_last_ping", secondsSinceLastPing,
+			)
 		}
 	}
 }
 
+// truncateString truncates a string to the specified length.
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
 // handleRequestEventWithTracking processes incoming HTTP request events
 func (tc *Client) handleRequestEventWithTracking(data string) {
+	log := logger.WithTunnel(tc.tunnelName).WithOperation("handle_request")
+
 	var req HTTPRequest
 	if err := json.Unmarshal([]byte(data), &req); err != nil {
-		fmt.Printf("❌ Failed to parse request: %v\n", err)
+		log.Error("failed to parse request", "error", err, "data_preview", truncateString(data, 200))
+		ui.Error("Failed to parse request: %v", err)
 		return
 	}
+
+	log.Debug("parsed request",
+		"request_id", req.RequestID,
+		"method", req.Method,
+		"path", req.Path,
+		"headers_count", len(req.Headers),
+	)
+
 	tc.forwardToLocalService(&req)
 }
 
@@ -534,25 +652,39 @@ var localHTTPClient = &http.Client{
 
 // forwardToLocalService forwards HTTP request to local application
 func (tc *Client) forwardToLocalService(req *HTTPRequest) {
+	log := logger.WithTunnel(tc.tunnelName).WithOperation("forward_request").
+		WithFields("request_id", req.RequestID, "method", req.Method, "path", req.Path)
+
+	startTime := time.Now()
+	log.Debug("forwarding request to local service", "target_port", tc.targetPort)
+
 	body, err := base64.StdEncoding.DecodeString(req.Body)
 	if err != nil {
+		log.Error("failed to decode request body", "error", err)
 		tc.sendError(req.RequestID, fmt.Sprintf("Invalid request body: %v", err))
 		return
 	}
 
 	localURL := fmt.Sprintf("http://localhost:%s%s", tc.targetPort, req.Path)
+	log.Debug("sending request to local URL", "url", localURL, "body_size", len(body))
 
 	// Create simple HTTP request (timeout handled by client)
 	httpReq, err := http.NewRequestWithContext(context.Background(), req.Method, localURL, bytes.NewReader(body))
 	if err != nil {
+		log.Error("failed to create HTTP request", "error", err)
 		tc.sendError(req.RequestID, fmt.Sprintf("Invalid request: %v", err))
 		return
 	}
+
+	// Set headers
 	for key, value := range req.Headers {
 		httpReq.Header.Set(key, value)
 	}
+	log.Debug("request headers set", "header_count", len(req.Headers))
+
 	resp, err := localHTTPClient.Do(httpReq)
 	if err != nil {
+		log.Error("local request failed", "error", err, "duration", time.Since(startTime))
 		tc.sendError(req.RequestID, fmt.Sprintf("Request failed: %v", err))
 		return
 	}
@@ -560,9 +692,17 @@ func (tc *Client) forwardToLocalService(req *HTTPRequest) {
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Error("failed to read response body", "error", err)
 		tc.sendError(req.RequestID, fmt.Sprintf("Failed to read response: %v", err))
 		return
 	}
+
+	duration := time.Since(startTime)
+	log.Info("request forwarded successfully",
+		"status_code", resp.StatusCode,
+		"response_size", len(respBody),
+		"duration", duration,
+	)
 
 	// Hop-by-hop headers that should not be forwarded
 	hopByHopHeaders := map[string]bool{
@@ -589,6 +729,8 @@ func (tc *Client) forwardToLocalService(req *HTTPRequest) {
 		}
 	}
 
+	log.Debug("response headers processed", "filtered_header_count", len(headers))
+
 	httpResp := &HTTPResponse{
 		RequestID:  req.RequestID,
 		StatusCode: resp.StatusCode,
@@ -601,14 +743,19 @@ func (tc *Client) forwardToLocalService(req *HTTPRequest) {
 		// Check if we're shutting down before logging error
 		select {
 		case <-tc.shutdownCtx.Done():
-			// Don't log errors during shutdown
+			log.Debug("not logging send error due to shutdown")
 			return
 		default:
 			// Don't log if it's a known 404 issue (tunnel deregistered)
 			if !strings.Contains(err.Error(), "reconnection triggered") {
-				fmt.Printf("❌ Failed to send response for %s %s: %v\n", req.Method, req.Path, err)
+				log.Error("failed to send response", "error", err)
+				ui.Error("Failed to send response for %s %s: %v", req.Method, req.Path, err)
+			} else {
+				log.Debug("response send failed due to tunnel deregistration", "error", err)
 			}
 		}
+	} else {
+		log.Debug("response sent successfully")
 	}
 }
 

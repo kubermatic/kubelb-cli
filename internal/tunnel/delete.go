@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"k8c.io/kubelb-cli/internal/config"
-	kubelbce "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
+	kubelbce "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
