@@ -87,3 +87,12 @@ snapshot: ## Create a snapshot release with goreleaser
 release: ## Create a production release with goreleaser
 	@echo "Creating production release..."
 	goreleaser release --clean
+
+yamllint:  ## Run yamllint against code.
+	yamllint -c .yamllint.conf .
+
+verify-boilerplate:  ## Run verify-boilerplate code.
+	./hack/verify-boilerplate.sh
+
+verify-imports:  ## Run verify-imports code.
+	./hack/verify-import-order.sh
