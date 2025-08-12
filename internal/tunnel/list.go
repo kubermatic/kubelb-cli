@@ -31,6 +31,10 @@ import (
 )
 
 func List(ctx context.Context, k8s client.Client, cfg *config.Config) error {
+	if cfg.IsCE() {
+		return ErrTunnelNotAvailable
+	}
+
 	tunnelList := &kubelbce.TunnelList{}
 
 	if err := k8s.List(ctx, tunnelList, client.InNamespace(cfg.TenantNamespace)); err != nil {

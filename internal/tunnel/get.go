@@ -29,6 +29,10 @@ import (
 )
 
 func Get(ctx context.Context, k8s client.Client, cfg *config.Config, name string) error {
+	if cfg.IsCE() {
+		return ErrTunnelNotAvailable
+	}
+
 	tunnel := &kubelbce.Tunnel{}
 
 	if err := k8s.Get(ctx, client.ObjectKey{

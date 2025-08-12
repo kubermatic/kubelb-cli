@@ -32,6 +32,7 @@ type Config struct {
 	Tenant             string
 	TenantNamespace    string
 	InsecureSkipVerify bool
+	Edition            string // "CE" or "EE"
 }
 
 // LoadConfig loads configuration from flags, environment variables, and defaults
@@ -132,4 +133,8 @@ func (c *Config) ValidateConfig() error {
 		return fmt.Errorf("tenant name is required")
 	}
 	return nil
+}
+
+func (c *Config) IsCE() bool {
+	return c.Edition == "CE"
 }

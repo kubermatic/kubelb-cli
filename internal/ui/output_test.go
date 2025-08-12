@@ -28,8 +28,7 @@ import (
 func TestNew(t *testing.T) {
 	output := New()
 	if output == nil {
-		t.Error("New() returned nil")
-		return
+		t.Fatal("New() returned nil")
 	}
 	if output.writer == nil {
 		t.Error("New() writer is nil")
