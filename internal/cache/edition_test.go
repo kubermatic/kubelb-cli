@@ -27,7 +27,7 @@ import (
 func TestEditionCache(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
-	
+
 	// Create a test kubeconfig file
 	testKubeconfig := filepath.Join(tmpDir, "kubeconfig")
 	kubeconfigContent := `
@@ -101,7 +101,7 @@ users:
 func TestCacheExpiration(t *testing.T) {
 	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
-	
+
 	// Create a test kubeconfig file
 	testKubeconfig := filepath.Join(tmpDir, "kubeconfig")
 	kubeconfigContent := `
