@@ -26,6 +26,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"k8c.io/kubelb-cli/internal/cache"
 	"k8c.io/kubelb-cli/internal/config"
 	"k8c.io/kubelb-cli/internal/constants"
 	"k8c.io/kubelb-cli/internal/edition"
@@ -123,15 +124,31 @@ func createKubernetesClientWithEditionDetection(ctx context.Context, cfg *config
 		return nil, err
 	}
 
-	detectedEdition, err := edition.DetectEdition(ctx, restConfig, cfg.TenantNamespace)
-	if err != nil {
-		log.Warn("Failed to detect KubeLB edition, defaulting to CE", "error", err)
-		detectedEdition = edition.EditionCE
+	// Try to load edition from cache first
+	cachedEdition := cache.LoadCache(cfg.KubeConfig, cfg.Tenant)
+	var detectedEdition edition.Edition
+
+	if cachedEdition != "" {
+		// Use cached edition
+		detectedEdition = edition.Edition(cachedEdition)
+		log.Debug("Loaded edition from cache", "edition", detectedEdition)
+	} else {
+		// Perform detection
+		detectedEdition, err = edition.DetectEdition(ctx, restConfig, cfg.TenantNamespace)
+		if err != nil {
+			log.Warn("Failed to detect KubeLB edition, defaulting to CE", "error", err)
+			detectedEdition = edition.EditionCE
+		}
+
+		log.Info("Using KubeLB edition", "edition", detectedEdition)
+
+		// Save to cache for future use
+		if err := cache.SaveCache(cfg.KubeConfig, cfg.Tenant, string(detectedEdition)); err != nil {
+			log.Debug("Failed to save edition to cache", "error", err)
+		}
 	}
 
 	cfg.Edition = string(detectedEdition)
-	log.Info("Using KubeLB edition", "edition", cfg.Edition)
-
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err
