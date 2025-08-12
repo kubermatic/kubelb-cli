@@ -76,3 +76,37 @@ run-version: build
 update-docs:
 	@echo "Updating docs..."
 	./$(BUILD_DIR)/$(BINARY_NAME) docs --output=./docs/cli
+
+
+.PHONY: snapshot
+snapshot: ## Create a snapshot release with goreleaser
+	@echo "Creating snapshot release..."
+	goreleaser release --snapshot --clean
+
+.PHONY: release
+release: ## Create a production release with goreleaser
+	@echo "Creating production release..."
+	goreleaser release --clean
+
+
+verify-boilerplate:  ## Run verify-boilerplate code.
+	./hack/verify-boilerplate.sh
+
+verify-imports:  ## Run verify-imports code.
+	./hack/verify-import-order.sh
+
+.PHONY: shfmt
+shfmt:
+	shfmt -w -sr -i 2 hack
+
+.PHONY: verify-shfmt
+verify-shfmt: ## Verify shell script formatting
+	shfmt -l -sr -i 2 -d hack
+
+.PHONY: verify-licenses
+verify-licenses: ## Verify license compliance
+	./hack/verify-licenses.sh
+
+.PHONY: verify-all
+verify-all: ## Run all verification checks
+	./hack/verify-all.sh

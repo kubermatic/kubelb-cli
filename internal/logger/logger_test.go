@@ -25,6 +25,13 @@ import (
 	"testing"
 )
 
+type contextKey string
+
+const (
+	requestIDKey contextKey = "request_id"
+	tenantKey    contextKey = "tenant"
+)
+
 func TestLevel_String(t *testing.T) {
 	tests := []struct {
 		level    Level
@@ -130,6 +137,7 @@ func TestNew(t *testing.T) {
 			logger := New(tt.config)
 			if logger == nil {
 				t.Error("New() returned nil")
+				return
 			}
 			if logger.Logger == nil {
 				t.Error("New().Logger is nil")
@@ -148,8 +156,8 @@ func TestLogger_WithContext(t *testing.T) {
 
 	logger := New(config)
 
-	ctx := context.WithValue(context.Background(), "request_id", "test-123")
-	ctx = context.WithValue(ctx, "tenant", "test-tenant")
+	ctx := context.WithValue(context.Background(), requestIDKey, "test-123")
+	ctx = context.WithValue(ctx, tenantKey, "test-tenant")
 
 	contextLogger := logger.WithContext(ctx)
 	contextLogger.Info("test message")
