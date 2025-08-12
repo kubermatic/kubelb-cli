@@ -136,8 +136,7 @@ func TestNew(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := New(tt.config)
 			if logger == nil {
-				t.Error("New() returned nil")
-				return
+				t.Fatal("New() returned nil")
 			}
 			if logger.Logger == nil {
 				t.Error("New().Logger is nil")

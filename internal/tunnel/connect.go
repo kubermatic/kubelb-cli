@@ -51,6 +51,10 @@ import (
 )
 
 func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelName string, port int) error {
+	if cfg.IsCE() {
+		return ErrTunnelNotAvailable
+	}
+
 	log := logger.WithTunnel(tunnelName).WithOperation("connect")
 
 	log.Info("starting tunnel connection",

@@ -28,8 +28,10 @@ import (
 
 	"k8c.io/kubelb-cli/internal/config"
 	"k8c.io/kubelb-cli/internal/constants"
+	"k8c.io/kubelb-cli/internal/edition"
 	"k8c.io/kubelb-cli/internal/logger"
-	kubelbce "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
+	kubelbce "k8c.io/kubelb/api/ce/kubelb.k8c.io/v1alpha1"
+	kubelbee "k8c.io/kubelb/api/ee/kubelb.k8c.io/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -90,8 +92,8 @@ to expose local services through the KubeLB infrastructure.`,
 			return err
 		}
 
-		// Create Kubernetes client
-		k8sClient, err = createKubernetesClient(cfg)
+		// Detect edition and create appropriate Kubernetes client
+		k8sClient, err = createKubernetesClientWithEditionDetection(cmd.Context(), cfg)
 		if err != nil {
 			return err
 		}
@@ -113,19 +115,38 @@ func Execute() error {
 	return rootCmd.ExecuteContext(ctx)
 }
 
-func createKubernetesClient(cfg *config.Config) (client.Client, error) {
+func createKubernetesClientWithEditionDetection(ctx context.Context, cfg *config.Config) (client.Client, error) {
+	log := logger.Get()
+
 	restConfig, err := config.CreateKubernetesConfig(cfg.KubeConfig)
 	if err != nil {
 		return nil, err
 	}
+
+	detectedEdition, err := edition.DetectEdition(ctx, restConfig, cfg.TenantNamespace)
+	if err != nil {
+		log.Warn("Failed to detect KubeLB edition, defaulting to CE", "error", err)
+		detectedEdition = edition.EditionCE
+	}
+
+	cfg.Edition = string(detectedEdition)
+	log.Info("Using KubeLB edition", "edition", cfg.Edition)
+
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
-	// Add CE API types for tunnel and loadbalancer support
-	if err := kubelbce.AddToScheme(scheme); err != nil {
-		return nil, err
+
+	if detectedEdition.IsEE() {
+		if err := kubelbee.AddToScheme(scheme); err != nil {
+			return nil, fmt.Errorf("failed to add EE API types to scheme: %w", err)
+		}
+	} else {
+		if err := kubelbce.AddToScheme(scheme); err != nil {
+			return nil, fmt.Errorf("failed to add CE API types to scheme: %w", err)
+		}
 	}
+
 	k8sClient, err := client.New(restConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
@@ -134,7 +155,6 @@ func createKubernetesClient(cfg *config.Config) (client.Client, error) {
 	return k8sClient, nil
 }
 
-// shouldSkipConfig determines if a command should skip configuration loading
 func shouldSkipConfig(cmd *cobra.Command) bool {
 	// Skip if it's the root command (no parent)
 	if cmd.Parent() == nil {

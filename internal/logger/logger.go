@@ -31,19 +31,12 @@ import (
 type Level int
 
 const (
-	// LevelError logs only errors and critical failures
 	LevelError Level = iota
-	// LevelWarn logs warnings and above
 	LevelWarn
-	// LevelInfo logs informational messages and above (default)
 	LevelInfo
-	// LevelDebug logs debug information and above
 	LevelDebug
-	// LevelTrace logs all messages including trace-level debugging
 	LevelTrace
-
-	// String constants for log levels
-	levelInfoString = "info"
+	levelInfoStr = "info"
 )
 
 // String returns the string representation of the logging level.
@@ -54,13 +47,13 @@ func (l Level) String() string {
 	case LevelWarn:
 		return "warn"
 	case LevelInfo:
-		return levelInfoString
+		return levelInfoStr
 	case LevelDebug:
 		return "debug"
 	case LevelTrace:
 		return "trace"
 	default:
-		return levelInfoString
+		return levelInfoStr
 	}
 }
 
@@ -89,7 +82,7 @@ func ParseLevel(s string) Level {
 		return LevelError
 	case "warn", "warning":
 		return LevelWarn
-	case "info", "information":
+	case levelInfoStr, "information":
 		return LevelInfo
 	case "debug":
 		return LevelDebug

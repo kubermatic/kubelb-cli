@@ -31,6 +31,10 @@ import (
 )
 
 func Delete(ctx context.Context, k8s client.Client, cfg *config.Config, name string, force bool) error {
+	if cfg.IsCE() {
+		return ErrTunnelNotAvailable
+	}
+
 	// Check if tunnel exists
 	tunnel := &kubelbce.Tunnel{}
 	if err := k8s.Get(ctx, client.ObjectKey{
