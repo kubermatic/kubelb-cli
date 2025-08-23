@@ -246,8 +246,13 @@ func runTunnelConnect(_ *cobra.Command, tunnelName string, port int) error {
 
 	err := tunnel.Connect(ctx, k8sClient, cfg, tunnelName, port)
 
-	// Don't show usage help when user gracefully cancels with Ctrl+C
+	// Don't show usage help when user gracefully cancels with Ctrl+C or deletes tunnel
 	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+
+	// Handle tunnel deletion as successful exit
+	if err != nil && err.Error() == "tunnel_deleted" {
 		return nil
 	}
 
