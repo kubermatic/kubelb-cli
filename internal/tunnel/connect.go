@@ -57,7 +57,7 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 
 	log := logger.WithTunnel(tunnelName).WithOperation("connect")
 
-	log.Info("starting tunnel connection",
+	log.Debug("starting tunnel connection",
 		"tunnel", tunnelName,
 		"port", port,
 		"tenant", cfg.TenantNamespace,
@@ -114,7 +114,6 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 	defer client.Close()
 
 	// Display connection information
-	ui.Header("Tunnel Connection")
 	ui.Info("%s", output.FormatConnectionInfo(tunnel.Status.URL, fmt.Sprintf("%d", port)))
 	if cfg.InsecureSkipVerify {
 		ui.Warning("TLS verification disabled")
@@ -136,7 +135,6 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 		cancel()
 	}()
 
-	log.Info("establishing tunnel connection")
 	return client.EstablishTunnel(tunnelCtx)
 }
 
@@ -289,7 +287,7 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 
 	log := logger.WithTunnel(tc.tunnelName).WithOperation("establish_tunnel")
 
-	log.Info("starting tunnel establishment",
+	log.Debug("starting tunnel establishment",
 		"max_retries", maxRetries,
 		"base_delay", baseDelay,
 		"max_delay", maxDelay,
@@ -445,7 +443,7 @@ func (tc *Client) establishSingleConnection(ctx context.Context) error {
 
 	// Connection successful - transition to connected state
 	atomic.StoreInt32(&tc.state, int32(StateConnected))
-	log.Info("tunnel connection established successfully")
+	log.Debug("tunnel connection established successfully")
 	ui.Success("Connected! Tunnel is ready to receive traffic")
 	ui.Info("Press Ctrl+C to disconnect")
 
@@ -465,7 +463,7 @@ func (tc *Client) isNonRecoverableError(err error) bool {
 // handleSSEEvents handles incoming SSE events from the server
 func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 	log := logger.WithTunnel(tc.tunnelName).WithOperation("handle_sse_events")
-	log.Info("starting SSE event handling")
+	log.Debug("starting SSE event handling")
 
 	scanner := bufio.NewScanner(body)
 
@@ -560,7 +558,7 @@ func (tc *Client) monitorConnectionHealth(ctx context.Context) {
 	const pingTimeout = 90
 
 	log := logger.WithTunnel(tc.tunnelName).WithOperation("monitor_connection_health")
-	log.Info("starting connection health monitoring", "ping_timeout_seconds", pingTimeout)
+	log.Debug("starting connection health monitoring", "ping_timeout_seconds", pingTimeout)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -571,10 +569,10 @@ func (tc *Client) monitorConnectionHealth(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("context cancelled, stopping health monitoring")
+			log.Debug("context cancelled, stopping health monitoring")
 			return
 		case <-tc.shutdownCtx.Done():
-			log.Info("client shutdown, stopping health monitoring")
+			log.Debug("client shutdown, stopping health monitoring")
 			return
 		case <-ticker.C:
 			now := time.Now().Unix()
@@ -702,7 +700,7 @@ func (tc *Client) forwardToLocalService(req *HTTPRequest) {
 	}
 
 	duration := time.Since(startTime)
-	log.Info("request forwarded successfully",
+	log.Debug("request forwarded successfully",
 		"status_code", resp.StatusCode,
 		"response_size", len(respBody),
 		"duration", duration,

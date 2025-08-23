@@ -139,9 +139,6 @@ func createKubernetesClientWithEditionDetection(ctx context.Context, cfg *config
 			log.Warn("Failed to detect KubeLB edition, defaulting to CE", "error", err)
 			detectedEdition = edition.EditionCE
 		}
-
-		log.Info("Using KubeLB edition", "edition", detectedEdition)
-
 		// Save to cache for future use
 		if err := cache.SaveCache(cfg.KubeConfig, cfg.Tenant, string(detectedEdition)); err != nil {
 			log.Debug("Failed to save edition to cache", "error", err)
@@ -287,6 +284,7 @@ func init() {
 
 	rootCmd.AddCommand(
 		versionCmd(),
+		statusCmd(),
 		loadbalancerCmd,
 		tunnelCmd,
 		exposeCmd(),

@@ -5,7 +5,9 @@
 
 # KubeLB CLI
 
-The KubeLB CLI provides tools to manage KubeLB load balancers and create secure tunnels to expose local services through the KubeLB infrastructure.
+The KubeLB CLI provides tools to manage KubeLB load balancers and create secure tunnels to expose local services through the KubeLB infrastructure(Requires KubeLB Enterprise Edition).
+
+For more information, please refer to the [KubeLB CLI documentation](https://docs.kubermatic.com/kubelb/latest/cli).
 
 ## Installation
 

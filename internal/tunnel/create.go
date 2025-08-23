@@ -42,15 +42,6 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 
 	log := logger.WithTunnel(opts.Name).WithOperation("create")
 
-	log.Info("starting tunnel creation",
-		"tunnel_name", opts.Name,
-		"port", opts.Port,
-		"hostname", opts.Hostname,
-		"tenant", cfg.TenantNamespace,
-		"wait", opts.Wait,
-		"connect", opts.Connect,
-	)
-
 	if opts.Port <= 0 || opts.Port > 65535 {
 		log.Error("invalid port specified", "port", opts.Port)
 		return fmt.Errorf("invalid port: %d (must be between 1 and 65535)", opts.Port)
@@ -110,32 +101,28 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 			log.Error("failed to create tunnel", "error", err)
 			return fmt.Errorf("failed to create tunnel: %w", err)
 		}
-		log.Info("tunnel resource created successfully")
+		log.Debug("tunnel resource created successfully")
 		ui.Success("Tunnel %s created", opts.Name)
 	}
 
 	// If connecting, start connection process in parallel with waiting
 	switch {
 	case opts.Connect && opts.Wait:
-		// Start a goroutine to connect as soon as the connection manager URL is available
 		connectErrCh := make(chan error, 1)
 		connectStarted := make(chan bool, 1)
 
 		go func() {
-			// Poll for connection manager URL availability
 			for {
 				var t kubelbee.Tunnel
 				if err := k8s.Get(ctx, client.ObjectKey{
 					Namespace: cfg.TenantNamespace,
 					Name:      opts.Name,
 				}, &t); err == nil && t.Status.ConnectionManagerURL != "" && t.Status.Phase == kubelbee.TunnelPhaseReady {
-					// URL is available, start connecting
 					fmt.Printf("✓ Connection manager URL available, establishing tunnel connection...\n")
 					connectStarted <- true
 					connectErrCh <- Connect(ctx, k8s, cfg, opts.Name, opts.Port)
 					return
 				}
-				// Check if context is cancelled
 				select {
 				case <-ctx.Done():
 					connectErrCh <- ctx.Err()
@@ -146,13 +133,11 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 			}
 		}()
 
-		// Wait for tunnel to be ready
 		fmt.Printf("Waiting for tunnel to be ready...\n")
 		if err := waitForTunnelReady(ctx, k8s, cfg.TenantNamespace, opts.Name, opts.Connect); err != nil {
 			return fmt.Errorf("tunnel creation failed: %w", err)
 		}
 
-		// Get updated tunnel status
 		if err := k8s.Get(ctx, client.ObjectKey{
 			Namespace: cfg.TenantNamespace,
 			Name:      opts.Name,
@@ -187,26 +172,20 @@ func Create(ctx context.Context, k8s client.Client, cfg *config.Config, opts Cre
 			return Connect(ctx, k8s, cfg, opts.Name, opts.Port)
 		}
 	case opts.Wait:
-		// Just wait without connecting
 		fmt.Printf("Waiting for tunnel to be ready...\n")
 		if err := waitForTunnelReady(ctx, k8s, cfg.TenantNamespace, opts.Name, opts.Connect); err != nil {
 			return fmt.Errorf("tunnel creation failed: %w", err)
 		}
-
-		// Get updated tunnel status
 		if err := k8s.Get(ctx, client.ObjectKey{
 			Namespace: cfg.TenantNamespace,
 			Name:      opts.Name,
 		}, tunnel); err != nil {
 			return fmt.Errorf("failed to get tunnel status: %w", err)
 		}
-
-		// Display tunnel information based on output format
 		if err := displayTunnel(tunnel, opts.Output); err != nil {
 			return fmt.Errorf("failed to display tunnel: %w", err)
 		}
 	case opts.Connect:
-		// Connect without waiting
 		fmt.Printf("\nConnecting to tunnel...\n")
 		return Connect(ctx, k8s, cfg, opts.Name, opts.Port)
 	}
@@ -257,12 +236,10 @@ func waitForTunnelReady(ctx context.Context, k8s client.Client, namespace, name 
 					fmt.Printf("✓ Tunnel ready\n")
 				}
 			case kubelbee.TunnelPhaseFailed:
-				fmt.Printf("✗ Tunnel failed\n") // Always show failures
+				fmt.Printf("✗ Tunnel failed\n")
 			}
 			lastStatus = currentStatus
 		}
-
-		// Show conditions progress (skip in quiet mode)
 		if !quiet {
 			showConditionsProgress(tunnel.Status.Conditions, shownConditions)
 		}
