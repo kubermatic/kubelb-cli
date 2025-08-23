@@ -268,7 +268,7 @@ func (o *Output) PromptChoice(message string, options []string, defaultChoice st
 
 	// Channel to capture user input
 	inputChan := make(chan string, 1)
-	
+
 	// Start goroutine to read user input
 	go func() {
 		reader := bufio.NewReader(os.Stdin)

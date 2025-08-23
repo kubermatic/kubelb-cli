@@ -53,28 +53,28 @@ import (
 // handleTunnelDisconnectionMenu presents an interactive menu when Ctrl+C is pressed
 func handleTunnelDisconnectionMenu(ctx context.Context, k8s client.Client, cfg *config.Config, tunnel *kubelbce.Tunnel, cancel context.CancelFunc) error {
 	ui.Warning("Tunnel disconnection requested")
-	
+
 	// Display tunnel information
 	fmt.Printf("\nTunnel: %s\n", tunnel.Name)
 	if tunnel.Status.URL != "" {
 		fmt.Printf("URL: %s\n", tunnel.Status.URL)
 	}
 	fmt.Printf("Status: %s\n", tunnel.Status.Phase)
-	
+
 	// Present options to user
 	options := []string{
 		"[D] Delete tunnel completely (remove from cluster)",
-		"[C] Disconnect tunnel (keep resource for later reconnection)", 
+		"[C] Disconnect tunnel (keep resource for later reconnection)",
 		"[A] Cancel and continue running",
 	}
-	
+
 	choice, err := ui.PromptChoice("What would you like to do?", options, "c", 30*time.Second)
 	if err != nil {
 		ui.Error("Failed to get user choice: %v", err)
 		// Default to disconnect on error
 		choice = "c"
 	}
-	
+
 	switch choice {
 	case "d", "delete":
 		ui.Info("Deleting tunnel...")
@@ -87,16 +87,16 @@ func handleTunnelDisconnectionMenu(ctx context.Context, k8s client.Client, cfg *
 		}
 		// Tunnel deleted successfully, no need to disconnect - it's already gone
 		return fmt.Errorf("tunnel_deleted")
-		
+
 	case "c", "disconnect":
 		ui.Info("Disconnecting tunnel...")
 		cancel()
 		return fmt.Errorf("user_disconnect")
-		
+
 	case "a", "cancel":
 		ui.Info("Continuing tunnel operation...")
 		return nil // Continue running
-		
+
 	default:
 		// Default to disconnect for unknown input
 		ui.Warning("Unknown choice '%s', disconnecting tunnel...", choice)
@@ -186,7 +186,7 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 	go func() {
 		<-sigCh
 		log.Info("received shutdown signal")
-		
+
 		// Present interactive menu to user
 		if err := handleTunnelDisconnectionMenu(ctx, k8s, cfg, tunnel, cancel); err != nil {
 			log.Debug("tunnel disconnection menu result", "error", err.Error())
