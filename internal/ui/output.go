@@ -20,10 +20,12 @@ limitations under the License.
 package ui
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"k8c.io/kubelb-cli/internal/logger"
 )
@@ -247,6 +249,50 @@ func (o *Output) JSON(data any) error {
 	return nil
 }
 
+// PromptChoice presents options to the user and returns their selection.
+// It displays a message, lists the options with keyboard shortcuts, and waits for user input.
+// If timeout is reached, the defaultChoice is returned.
+func (o *Output) PromptChoice(message string, options []string, defaultChoice string, timeout time.Duration) (string, error) {
+	if !o.enableUI {
+		return defaultChoice, nil
+	}
+
+	fmt.Fprintf(o.writer, "\n%s\n", message)
+
+	// Display options
+	for _, option := range options {
+		fmt.Fprintf(o.writer, "  %s\n", option)
+	}
+
+	fmt.Fprintf(o.writer, "\nChoice (timeout in %.0fs): ", timeout.Seconds())
+
+	// Channel to capture user input
+	inputChan := make(chan string, 1)
+	
+	// Start goroutine to read user input
+	go func() {
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			inputChan <- defaultChoice
+			return
+		}
+		inputChan <- strings.TrimSpace(strings.ToLower(input))
+	}()
+
+	// Wait for input or timeout
+	select {
+	case input := <-inputChan:
+		if input == "" {
+			return defaultChoice, nil
+		}
+		return input, nil
+	case <-time.After(timeout):
+		fmt.Fprintf(o.writer, "\nTimeout reached, using default: %s\n", defaultChoice)
+		return defaultChoice, nil
+	}
+}
+
 // shouldUseEmojis checks if emojis should be used in output.
 func shouldUseEmojis() bool {
 	if os.Getenv("NO_EMOJI") != "" {
@@ -334,4 +380,9 @@ func Header(title string) {
 // Table displays a table using the default output.
 func Table(headers []string, rows [][]string) {
 	defaultOutput.Table(headers, rows)
+}
+
+// PromptChoice presents options to the user and returns their selection
+func PromptChoice(message string, options []string, defaultChoice string, timeout time.Duration) (string, error) {
+	return defaultOutput.PromptChoice(message, options, defaultChoice, timeout)
 }

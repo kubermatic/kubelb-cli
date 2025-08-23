@@ -50,6 +50,61 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// handleTunnelDisconnectionMenu presents an interactive menu when Ctrl+C is pressed
+func handleTunnelDisconnectionMenu(ctx context.Context, k8s client.Client, cfg *config.Config, tunnel *kubelbce.Tunnel, cancel context.CancelFunc) error {
+	ui.Warning("Tunnel disconnection requested")
+	
+	// Display tunnel information
+	fmt.Printf("\nTunnel: %s\n", tunnel.Name)
+	if tunnel.Status.URL != "" {
+		fmt.Printf("URL: %s\n", tunnel.Status.URL)
+	}
+	fmt.Printf("Status: %s\n", tunnel.Status.Phase)
+	
+	// Present options to user
+	options := []string{
+		"[D] Delete tunnel completely (remove from cluster)",
+		"[C] Disconnect tunnel (keep resource for later reconnection)", 
+		"[A] Cancel and continue running",
+	}
+	
+	choice, err := ui.PromptChoice("What would you like to do?", options, "c", 30*time.Second)
+	if err != nil {
+		ui.Error("Failed to get user choice: %v", err)
+		// Default to disconnect on error
+		choice = "c"
+	}
+	
+	switch choice {
+	case "d", "delete":
+		ui.Info("Deleting tunnel...")
+		// Use force=true to avoid double confirmation since user already chose
+		if err := Delete(ctx, k8s, cfg, tunnel.Name, true); err != nil {
+			ui.Error("Failed to delete tunnel: %v", err)
+			// Still disconnect even if delete failed
+			cancel()
+			return err
+		}
+		// Tunnel deleted successfully, no need to disconnect - it's already gone
+		return fmt.Errorf("tunnel_deleted")
+		
+	case "c", "disconnect":
+		ui.Info("Disconnecting tunnel...")
+		cancel()
+		return fmt.Errorf("user_disconnect")
+		
+	case "a", "cancel":
+		ui.Info("Continuing tunnel operation...")
+		return nil // Continue running
+		
+	default:
+		// Default to disconnect for unknown input
+		ui.Warning("Unknown choice '%s', disconnecting tunnel...", choice)
+		cancel()
+		return fmt.Errorf("user_disconnect")
+	}
+}
+
 func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelName string, port int) error {
 	if cfg.IsCE() {
 		return ErrTunnelNotAvailable
@@ -125,14 +180,19 @@ func Connect(ctx context.Context, k8s client.Client, cfg *config.Config, tunnelN
 	tunnelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle Ctrl+C gracefully
+	// Handle Ctrl+C gracefully with interactive menu
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		log.Info("received shutdown signal")
-		ui.Disconnection("Disconnecting tunnel...")
-		cancel()
+		
+		// Present interactive menu to user
+		if err := handleTunnelDisconnectionMenu(ctx, k8s, cfg, tunnel, cancel); err != nil {
+			log.Debug("tunnel disconnection menu result", "error", err.Error())
+			// Error messages like "tunnel_deleted", "user_disconnect" are expected
+			// The cancel() function was already called in the menu handler if needed
+		}
 	}()
 
 	return client.EstablishTunnel(tunnelCtx)
