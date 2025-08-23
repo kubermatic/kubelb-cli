@@ -196,12 +196,14 @@ type Client struct {
 
 	// Connection state management
 	state          int32          // atomic ConnectionState
-	lastPing       int64          // atomic unix timestamp of last ping from server
 	reconnectCount int32          // atomic reconnection counter
 	requestWg      sync.WaitGroup // track in-flight requests
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 	needsReconnect int32 // atomic flag indicating reconnection needed
+
+	// HTTP/2 fallback management
+	useHTTP1 int32 // atomic flag to use HTTP/1.1 instead of HTTP/2
 }
 
 // NewClient creates a new tunnel client with HTTP/2
@@ -247,18 +249,42 @@ func NewClient(auth *Auth, connectionManagerURL, tunnelName, hostname, tenantNam
 
 	// Initialize connection state
 	atomic.StoreInt32(&client.state, int32(StateDisconnected))
-	atomic.StoreInt64(&client.lastPing, 0)
 	atomic.StoreInt32(&client.reconnectCount, 0)
 	atomic.StoreInt32(&client.needsReconnect, 0)
+	atomic.StoreInt32(&client.useHTTP1, 0)
 
 	return client, nil
 }
 
+// recreateClientsWithHTTP1 recreates HTTP clients using HTTP/1.1 instead of HTTP/2
+func (tc *Client) recreateClientsWithHTTP1() {
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: tc.httpClient.Transport.(*http2.Transport).TLSClientConfig.InsecureSkipVerify,
+	}
+
+	// Use regular HTTP transport instead of HTTP/2
+	transport := &http.Transport{
+		TLSClientConfig:   tlsConfig,
+		MaxIdleConns:      10,
+		IdleConnTimeout:   30 * time.Second,
+		DisableKeepAlives: false,
+	}
+
+	tc.httpClient = &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+
+	tc.sseClient = &http.Client{
+		Transport: transport,
+		// No timeout for SSE connections
+	}
+}
+
 func (tc *Client) Close() error {
-	// Signal shutdown to all goroutines
 	tc.shutdownCancel()
 
-	// Wait for in-flight requests to complete with timeout
 	done := make(chan struct{})
 	go func() {
 		tc.requestWg.Wait()
@@ -272,8 +298,6 @@ func (tc *Client) Close() error {
 		// Force shutdown after timeout
 		fmt.Printf("⚠️  Force shutdown after timeout\n")
 	}
-
-	// Update connection state
 	atomic.StoreInt32(&tc.state, int32(StateDisconnected))
 
 	return nil
@@ -358,6 +382,19 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 			return err
 		}
 
+		// Check if this is a grace period error - retry immediately without delay
+		if tc.isGracePeriodError(err) {
+			attemptLog.Info("Grace period detected, retrying immediately")
+			continue // Skip delay and try again immediately
+		}
+
+		// Check if this is an HTTP/2 stream error and we should fallback to HTTP/1.1
+		if tc.isHTTP2StreamError(err) && attempt >= 3 {
+			attemptLog.Info("Multiple HTTP/2 stream errors detected, falling back to HTTP/1.1")
+			atomic.StoreInt32(&tc.useHTTP1, 1)
+			ui.Info("Switching to HTTP/1.1 due to connection issues...")
+		}
+
 		// Log connection failure for actual errors
 		attemptLog.Warn("connection attempt failed", "error", err)
 		ui.Error("Connection attempt %d failed: %v", attempt+1, err)
@@ -380,6 +417,12 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 // establishSingleConnection attempts to create a single SSE connection
 func (tc *Client) establishSingleConnection(ctx context.Context) error {
 	log := logger.WithTunnel(tc.tunnelName).WithOperation("establish_single_connection")
+
+	// Switch to HTTP/1.1 if flagged due to HTTP/2 issues
+	if atomic.LoadInt32(&tc.useHTTP1) == 1 {
+		tc.recreateClientsWithHTTP1()
+		log.Info("switched to HTTP/1.1 transport for connection stability")
+	}
 
 	connectURL := tc.baseURL + "/tunnel/connect"
 	log.Debug("creating SSE request", "url", connectURL)
@@ -437,18 +480,58 @@ func (tc *Client) establishSingleConnection(ctx context.Context) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.Error("tunnel connection failed", "status", resp.StatusCode, "body", string(body))
-		return fmt.Errorf("tunnel connection failed: %s (status: %d)", string(body), resp.StatusCode)
+		bodyStr := string(body)
+
+		// Check if this is a grace period response (503 Service Unavailable)
+		if resp.StatusCode == http.StatusServiceUnavailable && strings.Contains(bodyStr, "grace period") {
+			retryAfter := resp.Header.Get("Retry-After")
+			if retryAfter != "" {
+				if seconds, err := strconv.Atoi(retryAfter); err == nil {
+					log.Info("Tunnel in grace period, will retry immediately",
+						"retry_after_seconds", seconds,
+						"response", bodyStr)
+					ui.Info("Tunnel reconnecting (was in grace period)...")
+
+					// Return special error for immediate retry (no delay)
+					return fmt.Errorf("grace_period_active: %s", bodyStr)
+				}
+			}
+
+			log.Info("Tunnel in grace period, retrying", "response", bodyStr)
+			return fmt.Errorf("grace_period_active: %s", bodyStr)
+		}
+
+		log.Error("tunnel connection failed", "status", resp.StatusCode, "body", bodyStr)
+		return fmt.Errorf("tunnel connection failed: %s (status: %d)", bodyStr, resp.StatusCode)
 	}
 
 	// Connection successful - transition to connected state
 	atomic.StoreInt32(&tc.state, int32(StateConnected))
-	log.Debug("tunnel connection established successfully")
+	log.Info("tunnel connection established successfully",
+		"tunnel_name", tc.tunnelName,
+		"hostname", tc.hostname,
+		"target_port", tc.targetPort,
+		"connection_manager_url", tc.baseURL)
 	ui.Success("Connected! Tunnel is ready to receive traffic")
 	ui.Info("Press Ctrl+C to disconnect")
 
 	// Handle SSE events - this blocks until connection dies or context is cancelled
 	return tc.handleSSEEvents(ctx, resp.Body)
+}
+
+// isGracePeriodError determines if an error indicates tunnel is in grace period
+func (tc *Client) isGracePeriodError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "grace_period_active") ||
+		strings.Contains(errStr, "grace period")
+}
+
+// isHTTP2StreamError determines if an error is related to HTTP/2 stream issues
+func (tc *Client) isHTTP2StreamError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "stream error") ||
+		strings.Contains(errStr, "stream ID") ||
+		strings.Contains(errStr, "NO_ERROR; received from peer")
 }
 
 // isNonRecoverableError determines if an error should stop reconnection attempts
@@ -466,10 +549,6 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 	log.Debug("starting SSE event handling")
 
 	scanner := bufio.NewScanner(body)
-
-	// Start connection health monitoring (server → client pings only)
-	go tc.monitorConnectionHealth(ctx)
-
 	eventCount := 0
 	for scanner.Scan() {
 		select {
@@ -512,23 +591,6 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 			case "request":
 				eventLog.Debug("handling request event")
 				go tc.handleRequestEventWithTracking(data)
-			case "ping":
-				// Update last ping timestamp - proves server connection is alive
-				atomic.StoreInt64(&tc.lastPing, time.Now().Unix())
-				eventLog.Debug("received ping event", "data", data)
-
-				// Reduce noise: only log keepalive pings every minute (every 60th ping)
-				if strings.HasPrefix(data, "keepalive-") {
-					if pingCount := strings.TrimPrefix(data, "keepalive-"); pingCount != "" {
-						if num, _ := strconv.Atoi(pingCount); num%60 == 0 {
-							ui.Health("Connection healthy (ping #%s)", pingCount)
-							eventLog.Info("connection health ping", "ping_count", num)
-						}
-					}
-				}
-			case "pong":
-				// Server acknowledgment - suppress this message to reduce noise
-				eventLog.Debug("received pong event", "data", data)
 			case "error":
 				eventLog.Error("received error event from server", "error", data)
 				ui.Error("Server error: %s", data)
@@ -536,6 +598,7 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 			default:
 				eventLog.Warn("received unknown event type", "event_type", eventType, "data", data)
 			}
+
 		}
 	}
 
@@ -545,69 +608,12 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 			log.Info("scanner cancelled gracefully")
 			return context.Canceled
 		}
-		log.Error("error reading SSE stream", "error", err)
+		log.Error("error reading SSE stream", "error", err, "events_processed", eventCount)
 		return fmt.Errorf("error reading SSE stream: %w", err)
 	}
 
 	log.Warn("SSE stream ended unexpectedly", "events_processed", eventCount)
 	return fmt.Errorf("SSE stream ended unexpectedly")
-}
-
-// monitorConnectionHealth monitors the health of the tunnel connection
-func (tc *Client) monitorConnectionHealth(ctx context.Context) {
-	const pingTimeout = 90
-
-	log := logger.WithTunnel(tc.tunnelName).WithOperation("monitor_connection_health")
-	log.Debug("starting connection health monitoring", "ping_timeout_seconds", pingTimeout)
-
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	healthLogTicker := time.NewTicker(5 * time.Minute)
-	defer healthLogTicker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Debug("context cancelled, stopping health monitoring")
-			return
-		case <-tc.shutdownCtx.Done():
-			log.Debug("client shutdown, stopping health monitoring")
-			return
-		case <-ticker.C:
-			now := time.Now().Unix()
-			lastPing := atomic.LoadInt64(&tc.lastPing)
-
-			log.Debug("health check", "last_ping_ago_seconds", now-lastPing)
-
-			// Check if reconnection was requested due to 404 errors
-			if atomic.LoadInt32(&tc.needsReconnect) == 1 {
-				log.Warn("reconnection needed due to 404 errors")
-				ui.Progress("Connection lost, reconnecting...")
-				return
-			}
-
-			// Check if we haven't received a ping in too long (connection issue)
-			if lastPing > 0 && now-lastPing > pingTimeout {
-				log.Warn("connection timeout detected", "seconds_since_last_ping", now-lastPing)
-				ui.Warning("Connection timeout (%d seconds), reconnecting...", now-lastPing)
-				// Connection is dead, trigger reconnection by returning
-				return
-			}
-		case <-healthLogTicker.C:
-			// Log periodic health status at debug level
-			state := ConnectionState(atomic.LoadInt32(&tc.state))
-			reconnects := atomic.LoadInt32(&tc.reconnectCount)
-			lastPing := atomic.LoadInt64(&tc.lastPing)
-			secondsSinceLastPing := time.Now().Unix() - lastPing
-
-			log.Debug("periodic health check",
-				"state", state.String(),
-				"reconnects", reconnects,
-				"seconds_since_last_ping", secondsSinceLastPing,
-			)
-		}
-	}
 }
 
 // truncateString truncates a string to the specified length.
@@ -641,12 +647,12 @@ func (tc *Client) handleRequestEventWithTracking(data string) {
 
 // Create a shared HTTP client with connection pooling (optimized for fast response)
 var localHTTPClient = &http.Client{
-	Timeout: 8 * time.Second, // Match server timeout expectations
+	Timeout: 8 * time.Second,
 	Transport: &http.Transport{
 		MaxIdleConns:          50,
 		MaxIdleConnsPerHost:   5,
 		IdleConnTimeout:       30 * time.Second,
-		DisableCompression:    false, // Allow compression for local connections
+		DisableCompression:    false,
 		ResponseHeaderTimeout: 5 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	},
@@ -789,6 +795,13 @@ func (tc *Client) sendResponse(resp *HTTPResponse) error {
 
 	if httpResp.StatusCode == 404 {
 		// This indicates the tunnel is no longer registered on the server
+		body, _ := io.ReadAll(httpResp.Body)
+		log := logger.WithTunnel(tc.tunnelName).WithOperation("send_response")
+		log.Error("tunnel not found on server",
+			"status", httpResp.StatusCode,
+			"response_body", string(body),
+			"request_id", resp.RequestID,
+			"connection_state", ConnectionState(atomic.LoadInt32(&tc.state)).String())
 		// Set flag for reconnection needed
 		atomic.StoreInt32(&tc.needsReconnect, 1)
 		return fmt.Errorf("tunnel not found on server (404), may need reconnection")
