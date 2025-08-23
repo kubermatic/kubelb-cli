@@ -216,6 +216,8 @@ func NewClient(auth *Auth, connectionManagerURL, tunnelName, hostname, tenantNam
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: insecureSkipVerify,
+		// Disable client session cache which might cause OCSP timeouts
+		ClientSessionCache: nil,
 	}
 	transport := &http2.Transport{
 		TLSClientConfig: tlsConfig,
