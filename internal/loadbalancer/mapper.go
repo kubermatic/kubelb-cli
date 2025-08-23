@@ -38,15 +38,13 @@ func DisplayLoadbalancerList(loadbalancers []kubelb.LoadBalancer) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 	defer w.Flush()
 
-	fmt.Fprintln(w, "ID\tNAME\tTYPE\tINGRESS ENDPOINTS\tCLI GENERATED\tAGE")
+	fmt.Fprintln(w, "NAME\tHOSTNAME\tINGRESS ENDPOINTS\tTYPE\tCLI GENERATED\tAGE")
 
 	for _, lb := range loadbalancers {
-		// Get origin name from labels
-		originNamespace := lb.Labels["kubelb.k8c.io/origin-ns"]
-		originName := lb.Labels["kubelb.k8c.io/origin-name"]
-		name := fmt.Sprintf("%s/%s", originNamespace, originName)
-		if originNamespace == "" || originName == "" {
-			name = constants.NoneValue
+		// Get hostname from status
+		hostname := constants.NoneValue
+		if lb.Status.Hostname != nil && lb.Status.Hostname.Hostname != "" {
+			hostname = lb.Status.Hostname.Hostname
 		}
 
 		// Get ingress endpoints from status
@@ -57,9 +55,9 @@ func DisplayLoadbalancerList(loadbalancers []kubelb.LoadBalancer) {
 
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			lb.Name,
-			name,
-			string(lb.Spec.Type),
+			hostname,
 			ingressEndpoints,
+			string(lb.Spec.Type),
 			cliGenerated,
 			age,
 		)
