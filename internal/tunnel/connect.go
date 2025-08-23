@@ -520,8 +520,9 @@ func (tc *Client) establishSingleConnection(ctx context.Context) error {
 		return fmt.Errorf("tunnel connection failed: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
-	// Connection successful - transition to connected state
+	// Connection successful - transition to connected state and clear reconnection flag
 	atomic.StoreInt32(&tc.state, int32(StateConnected))
+	atomic.StoreInt32(&tc.needsReconnect, 0)
 	log.Debug("tunnel connection established successfully")
 	ui.Success("Connected! Tunnel is ready to receive traffic")
 	ui.Info("Press Ctrl+C to disconnect")
@@ -899,6 +900,9 @@ func (tc *Client) sendResponse(resp *HTTPResponse) error {
 		body, _ := io.ReadAll(httpResp.Body)
 		return fmt.Errorf("server returned error: %d - %s", httpResp.StatusCode, string(body))
 	}
+
+	// Clear reconnection flag on successful response
+	atomic.StoreInt32(&tc.needsReconnect, 0)
 
 	return nil
 }
