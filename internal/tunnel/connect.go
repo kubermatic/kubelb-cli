@@ -51,7 +51,7 @@ import (
 )
 
 // handleTunnelDisconnectionMenu presents an interactive menu when Ctrl+C is pressed
-func handleTunnelDisconnectionMenu(ctx context.Context, k8s client.Client, cfg *config.Config, tunnel *kubelbce.Tunnel, cancel context.CancelFunc) error {
+func handleTunnelDisconnectionMenu(_ context.Context, k8s client.Client, cfg *config.Config, tunnel *kubelbce.Tunnel, cancel context.CancelFunc) error {
 	ui.Warning("Tunnel disconnection requested")
 
 	// Display tunnel information
@@ -78,14 +78,21 @@ func handleTunnelDisconnectionMenu(ctx context.Context, k8s client.Client, cfg *
 	switch choice {
 	case "d", "delete":
 		ui.Info("Deleting tunnel...")
+		// Create a fresh context with timeout for the delete operation
+		// Don't inherit the potentially expired original context
+		deleteCtx, deleteCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer deleteCancel()
+
 		// Use force=true to avoid double confirmation since user already chose
-		if err := Delete(ctx, k8s, cfg, tunnel.Name, true); err != nil {
+		// Use verbose=false to avoid showing detailed tunnel information
+		if err := DeleteWithOptions(deleteCtx, k8s, cfg, tunnel.Name, true, false); err != nil {
 			ui.Error("Failed to delete tunnel: %v", err)
 			// Still disconnect even if delete failed
 			cancel()
 			return err
 		}
-		// Tunnel deleted successfully, no need to disconnect - it's already gone
+		// Tunnel deleted successfully - cancel the context to exit gracefully
+		cancel()
 		return fmt.Errorf("tunnel_deleted")
 
 	case "c", "disconnect":
@@ -418,6 +425,18 @@ func (tc *Client) EstablishTunnel(ctx context.Context) error {
 			return err
 		}
 
+		// Check if this is a connection closed due to context cancellation
+		if strings.Contains(err.Error(), "response body closed") || strings.Contains(err.Error(), "http2: response body closed") {
+			select {
+			case <-ctx.Done():
+				// Context was canceled, treat this as graceful shutdown
+				attemptLog.Info("connection closed due to context cancellation")
+				return ctx.Err()
+			default:
+				// Context wasn't canceled, this is a real connection error
+			}
+		}
+
 		// Log connection failure for actual errors
 		attemptLog.Warn("connection attempt failed", "error", err)
 		ui.Error("Connection attempt %d failed: %v", attempt+1, err)
@@ -508,7 +527,7 @@ func (tc *Client) establishSingleConnection(ctx context.Context) error {
 	ui.Info("Press Ctrl+C to disconnect")
 
 	// Handle SSE events - this blocks until connection dies or context is cancelled
-	return tc.handleSSEEvents(ctx, resp.Body)
+	return tc.handleSSEEventsWithContext(ctx, resp.Body, resp)
 }
 
 // isNonRecoverableError determines if an error should stop reconnection attempts
@@ -518,6 +537,19 @@ func (tc *Client) isNonRecoverableError(err error) bool {
 		strings.Contains(errStr, "403") || // Forbidden
 		strings.Contains(errStr, "invalid token") ||
 		strings.Contains(errStr, "authentication failed")
+}
+
+// handleSSEEventsWithContext handles incoming SSE events from the server with proper context cancellation
+func (tc *Client) handleSSEEventsWithContext(ctx context.Context, body io.Reader, resp *http.Response) error {
+	// Monitor context cancellation and close the response to interrupt scanner.Scan()
+	go func() {
+		<-ctx.Done()
+		if resp != nil {
+			resp.Body.Close()
+		}
+	}()
+
+	return tc.handleSSEEvents(ctx, body)
 }
 
 // handleSSEEvents handles incoming SSE events from the server
@@ -605,8 +637,17 @@ func (tc *Client) handleSSEEvents(ctx context.Context, body io.Reader) error {
 			log.Info("scanner cancelled gracefully")
 			return context.Canceled
 		}
-		log.Error("error reading SSE stream", "error", err)
-		return fmt.Errorf("error reading SSE stream: %w", err)
+
+		// Check if this is due to context cancellation (response body closed)
+		select {
+		case <-ctx.Done():
+			log.Info("scanner stopped due to context cancellation")
+			return ctx.Err()
+		default:
+			// Context wasn't canceled, this is a real error
+			log.Error("error reading SSE stream", "error", err)
+			return fmt.Errorf("error reading SSE stream: %w", err)
+		}
 	}
 
 	log.Warn("SSE stream ended unexpectedly", "events_processed", eventCount)
