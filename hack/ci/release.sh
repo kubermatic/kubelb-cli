@@ -17,7 +17,7 @@ set -euo pipefail
 
 export GITHUB_TOKEN=$(cat /etc/github/oauth | tr -d '\n')
 
-cd $(dirname $0)/..
+cd $(dirname $0)/../..
 
 git remote add origin git@github.com:kubermatic/kubelb-cli.git
 make release
