@@ -32,13 +32,14 @@ func docsCmd() *cobra.Command {
 		Short: "Generate markdown documentation for all commands",
 		Long: `Generate markdown documentation for all CLI commands and their parameters.
 This creates individual markdown files for each command with complete usage information.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(root *cobra.Command, _ []string) error {
 			if err := os.MkdirAll(outputDir, 0755); err != nil {
 				return fmt.Errorf("failed to create output directory: %w", err)
 			}
-
-			// Generate markdown documentation
-			err := doc.GenMarkdownTree(rootCmd, outputDir)
+			prepender := empty
+			linkHandler := identity
+			root.DisableAutoGenTag = true
+			err := doc.GenMarkdownTreeCustom(root, outputDir, prepender, linkHandler)
 			if err != nil {
 				return fmt.Errorf("failed to generate documentation: %w", err)
 			}
@@ -50,4 +51,12 @@ This creates individual markdown files for each command with complete usage info
 
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "./docs", "Output directory for generated documentation")
 	return cmd
+}
+
+func identity(s string) string {
+	return s
+}
+
+func empty(_ string) string {
+	return ""
 }
