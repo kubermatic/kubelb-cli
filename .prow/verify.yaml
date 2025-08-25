@@ -22,7 +22,7 @@ presubmits:
       preset-goproxy: "true"
     spec:
       containers:
-        - image: quay.io/kubermatic/build:go-1.24-node-20-kind-0.27-6
+        - image: quay.io/kubermatic/build:go-1.25-node-22-1
           command:
             - make
           args:
@@ -40,7 +40,7 @@ presubmits:
       preset-goproxy: "true"
     spec:
       containers:
-        - image: quay.io/kubermatic/build:go-1.24-node-20-kind-0.27-6
+        - image: quay.io/kubermatic/build:go-1.25-node-22-1
           command:
             - make
           args:
@@ -57,7 +57,7 @@ presubmits:
       preset-goproxy: "true"
     spec:
       containers:
-        - image: golangci/golangci-lint:v2.3.1
+        - image: golangci/golangci-lint:v2.4.0
           command:
             - make
           args:
@@ -75,7 +75,7 @@ presubmits:
       preset-goproxy: "true"
     spec:
       containers:
-        - image: golang:1.24
+        - image: golang:1.25
           command:
             - make
           args:
