@@ -75,7 +75,7 @@ func extractEditionFromTenantState(tenantState *unstructured.Unstructured) (Edit
 		return EditionUnknown, fmt.Errorf("status not found in TenantState")
 	}
 
-	editionStr, found, err := unstructured.NestedString(status, "edition")
+	editionStr, found, err := unstructured.NestedString(status, "version", "edition")
 	if err != nil || !found {
 		return EditionUnknown, fmt.Errorf("edition not found in TenantState status")
 	}
