@@ -15,3 +15,5 @@ dist/
 
 # Submodule directory (keep .gitmodules but ignore the actual submodule content)
 kubelb/
+
+cosign.*
