@@ -11,6 +11,7 @@ cover.out
 kubelb-*.tgz
 __debug*
 charts/*/charts
+dist/
 
 # Submodule directory (keep .gitmodules but ignore the actual submodule content)
 kubelb/

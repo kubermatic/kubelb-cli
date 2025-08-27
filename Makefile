@@ -81,6 +81,7 @@ update-docs:
 .PHONY: snapshot
 snapshot: ## Create a snapshot release with goreleaser
 	@echo "Creating snapshot release..."
+	sleep 100000
 	goreleaser release --snapshot --clean
 
 .PHONY: release
