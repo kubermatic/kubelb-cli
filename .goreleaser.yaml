@@ -51,7 +51,7 @@ builds:
       - -mod=readonly
 
 archives:
-  - id: kubelb
+  - id: kubelb-cli
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -75,5 +75,23 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-# sboms:
-#   - artifacts: archive
+sboms:
+  - id: source
+    artifacts: source
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_source_sbom.spdx.json"
+  - id: archive
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}_sbom.spdx.json"
+
+signs:
+  - cmd: cosign
+    args:
+      - sign-blob
+      - "--key=env://COSIGN_KEY"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
