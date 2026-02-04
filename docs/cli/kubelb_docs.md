@@ -1,3 +1,9 @@
++++
+title = "kubelb docs"
+date = 2026-02-04T00:00:00+00:00
+weight = 30
++++
+
 ## kubelb docs
 
 Generate markdown documentation for all commands
@@ -7,6 +13,9 @@ Generate markdown documentation for all commands
 Generate markdown documentation for all CLI commands and their parameters.
 This creates individual markdown files for each command with complete usage information.
 
+Use --hugo flag to generate Hugo-compatible documentation with front matter
+for integration with static site generators.
+
 ```
 kubelb docs [flags]
 ```
@@ -15,6 +24,7 @@ kubelb docs [flags]
 
 ```
   -h, --help            help for docs
+      --hugo            Generate Hugo-compatible docs with front matter
   -o, --output string   Output directory for generated documentation (default "./docs")
 ```
 
@@ -33,5 +43,5 @@ kubelb docs [flags]
 
 ### SEE ALSO
 
-* [kubelb](kubelb.md)	 - KubeLB CLI - Manage load balancers and create secure tunnels
+* [kubelb](../kubelb)	 - KubeLB CLI - Manage load balancers and create secure tunnels
 

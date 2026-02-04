@@ -1,3 +1,9 @@
++++
+title = "kubelb completion fish"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb completion fish
 
 Generate the autocompletion script for fish
@@ -43,5 +49,5 @@ kubelb completion fish [flags]
 
 ### SEE ALSO
 
-* [kubelb completion](kubelb_completion.md)	 - Generate the autocompletion script for the specified shell
+* [kubelb completion](../kubelb_completion)	 - Generate the autocompletion script for the specified shell
 

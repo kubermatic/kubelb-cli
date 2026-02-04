@@ -75,7 +75,7 @@ run-version: build
 
 update-docs:
 	@echo "Updating docs..."
-	./$(BUILD_DIR)/$(BINARY_NAME) docs --output=./docs/cli
+	./$(BUILD_DIR)/$(BINARY_NAME) docs --hugo --output=./docs/cli
 
 
 .PHONY: snapshot

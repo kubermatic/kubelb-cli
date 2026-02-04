@@ -1,3 +1,9 @@
++++
+title = "kubelb tunnel get"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb tunnel get
 
 Get a tunnel
@@ -38,5 +44,5 @@ kubelb tunnel get my-app --tenant=mytenant --kubeconfig=./kubeconfig
 
 ### SEE ALSO
 
-* [kubelb tunnel](kubelb_tunnel.md)	 - Manage secure tunnels to expose local services
+* [kubelb tunnel](../kubelb_tunnel)	 - Manage secure tunnels to expose local services
 

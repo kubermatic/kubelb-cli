@@ -1,3 +1,9 @@
++++
+title = "kubelb tunnel"
+date = 2026-02-04T00:00:00+00:00
+weight = 30
++++
+
 ## kubelb tunnel
 
 Manage secure tunnels to expose local services
@@ -27,10 +33,10 @@ Create and manage secure tunnels to expose local services through the KubeLB inf
 
 ### SEE ALSO
 
-* [kubelb](kubelb.md)	 - KubeLB CLI - Manage load balancers and create secure tunnels
-* [kubelb tunnel connect](kubelb_tunnel_connect.md)	 - Connect to an existing tunnel
-* [kubelb tunnel create](kubelb_tunnel_create.md)	 - Create a tunnel
-* [kubelb tunnel delete](kubelb_tunnel_delete.md)	 - Delete a tunnel
-* [kubelb tunnel get](kubelb_tunnel_get.md)	 - Get a tunnel
-* [kubelb tunnel list](kubelb_tunnel_list.md)	 - List tunnels
+* [kubelb](../kubelb)	 - KubeLB CLI - Manage load balancers and create secure tunnels
+* [kubelb tunnel connect](../kubelb_tunnel_connect)	 - Connect to an existing tunnel
+* [kubelb tunnel create](../kubelb_tunnel_create)	 - Create a tunnel
+* [kubelb tunnel delete](../kubelb_tunnel_delete)	 - Delete a tunnel
+* [kubelb tunnel get](../kubelb_tunnel_get)	 - Get a tunnel
+* [kubelb tunnel list](../kubelb_tunnel_list)	 - List tunnels
 

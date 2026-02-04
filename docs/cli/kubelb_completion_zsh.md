@@ -1,3 +1,9 @@
++++
+title = "kubelb completion zsh"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb completion zsh
 
 Generate the autocompletion script for zsh
@@ -54,5 +60,5 @@ kubelb completion zsh [flags]
 
 ### SEE ALSO
 
-* [kubelb completion](kubelb_completion.md)	 - Generate the autocompletion script for the specified shell
+* [kubelb completion](../kubelb_completion)	 - Generate the autocompletion script for the specified shell
 

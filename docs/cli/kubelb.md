@@ -1,3 +1,9 @@
++++
+title = "kubelb"
+date = 2026-02-04T00:00:00+00:00
+weight = 10
++++
+
 ## kubelb
 
 KubeLB CLI - Manage load balancers and create secure tunnels
@@ -23,11 +29,13 @@ to expose local services through the KubeLB infrastructure.
 
 ### SEE ALSO
 
-* [kubelb completion](kubelb_completion.md)	 - Generate the autocompletion script for the specified shell
-* [kubelb docs](kubelb_docs.md)	 - Generate markdown documentation for all commands
-* [kubelb expose](kubelb_expose.md)	 - Expose a local port via tunnel
-* [kubelb loadbalancer](kubelb_loadbalancer.md)	 - Manage KubeLB load balancers
-* [kubelb status](kubelb_status.md)	 - Display current status of KubeLB
-* [kubelb tunnel](kubelb_tunnel.md)	 - Manage secure tunnels to expose local services
-* [kubelb version](kubelb_version.md)	 - Print the version information
+* [kubelb completion](../kubelb_completion)	 - Generate the autocompletion script for the specified shell
+* [kubelb docs](../kubelb_docs)	 - Generate markdown documentation for all commands
+* [kubelb expose](../kubelb_expose)	 - Expose a local port via tunnel
+* [kubelb ingress](../kubelb_ingress)	 - Migrate Ingress resources to Gateway API
+* [kubelb loadbalancer](../kubelb_loadbalancer)	 - Manage KubeLB load balancers
+* [kubelb serve](../kubelb_serve)	 - Start web dashboard for interactive Ingress migration
+* [kubelb status](../kubelb_status)	 - Display current status of KubeLB
+* [kubelb tunnel](../kubelb_tunnel)	 - Manage secure tunnels to expose local services
+* [kubelb version](../kubelb_version)	 - Print the version information
 

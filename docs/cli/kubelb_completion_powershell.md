@@ -1,3 +1,9 @@
++++
+title = "kubelb completion powershell"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb completion powershell
 
 Generate the autocompletion script for powershell
@@ -40,5 +46,5 @@ kubelb completion powershell [flags]
 
 ### SEE ALSO
 
-* [kubelb completion](kubelb_completion.md)	 - Generate the autocompletion script for the specified shell
+* [kubelb completion](../kubelb_completion)	 - Generate the autocompletion script for the specified shell
 

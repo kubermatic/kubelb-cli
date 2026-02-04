@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // List of commands that don't require kubeconfig or tenant name etc.
@@ -45,6 +46,8 @@ const (
 	CmdNameHelp       = "help"
 	CmdNameCompletion = "completion"
 	CmdNameDocs       = "docs"
+	CmdNameIngress    = "ingress" // Ingress/serve commands only need kubeconfig, not tenant
+	CmdNameServe      = "serve"
 )
 
 var (
@@ -86,6 +89,11 @@ to expose local services through the KubeLB infrastructure.`,
 			return nil
 		}
 
+		// Ingress and serve commands only need kubeconfig, not tenant
+		if needsMinimalClient(cmd) {
+			return initializeMinimalClient()
+		}
+
 		// Load configuration
 		var err error
 		cfg, err = config.LoadConfig(kubeconfig, tenant)
@@ -108,7 +116,7 @@ func Execute() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	// Apply timeout if specified
+	// Apply timeout if specified (long-running commands like serve override this)
 	if timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -150,6 +158,9 @@ func createKubernetesClientWithEditionDetection(ctx context.Context, cfg *config
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, err
 	}
+	if err := gwapiv1.Install(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add Gateway API types to scheme: %w", err)
+	}
 
 	if detectedEdition.IsEE() {
 		if err := kubelbee.AddToScheme(scheme); err != nil {
@@ -183,6 +194,57 @@ func shouldSkipConfig(cmd *cobra.Command) bool {
 	}
 
 	return false
+}
+
+// needsMinimalClient checks if the command only needs kubeconfig (no tenant)
+func needsMinimalClient(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		switch c.Name() {
+		case CmdNameIngress, CmdNameServe:
+			return true
+		}
+	}
+	return false
+}
+
+// initializeMinimalClient sets up k8s client without tenant (for ingress/serve commands)
+func initializeMinimalClient() error {
+	// Resolve kubeconfig
+	kubeconfigPath := kubeconfig
+	if kubeconfigPath == "" {
+		kubeconfigPath = os.Getenv("KUBECONFIG")
+	}
+	if kubeconfigPath == "" {
+		return fmt.Errorf("kubeconfig is required: use --kubeconfig flag or KUBECONFIG environment variable")
+	}
+
+	// Create REST config
+	restConfig, err := config.CreateKubernetesConfig(kubeconfigPath)
+	if err != nil {
+		return err
+	}
+
+	// Create scheme with Gateway API types
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		return err
+	}
+	if err := gwapiv1.Install(scheme); err != nil {
+		return fmt.Errorf("failed to add Gateway API types to scheme: %w", err)
+	}
+
+	// Create client
+	k8sClient, err = client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		return err
+	}
+
+	// Initialize minimal config for compatibility
+	cfg = &config.Config{
+		KubeConfig: kubeconfigPath,
+	}
+
+	return nil
 }
 
 // initializeLogger sets up the global logger based on CLI flags and environment variables.
@@ -286,6 +348,8 @@ func init() {
 		versionCmd(),
 		statusCmd(),
 		loadbalancerCmd,
+		ingressCmd,
+		serveCmd,
 		tunnelCmd,
 		exposeCmd(),
 		docsCmd(),

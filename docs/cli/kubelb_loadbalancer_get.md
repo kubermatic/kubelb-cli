@@ -1,3 +1,9 @@
++++
+title = "kubelb loadbalancer get"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb loadbalancer get
 
 Get a load balancer
@@ -38,5 +44,5 @@ kubelb loadbalancer get nginx-loadbalancer --tenant=mytenant --kubeconfig=./kube
 
 ### SEE ALSO
 
-* [kubelb loadbalancer](kubelb_loadbalancer.md)	 - Manage KubeLB load balancers
+* [kubelb loadbalancer](../kubelb_loadbalancer)	 - Manage KubeLB load balancers
 
