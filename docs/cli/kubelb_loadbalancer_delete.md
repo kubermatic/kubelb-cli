@@ -1,3 +1,9 @@
++++
+title = "kubelb loadbalancer delete"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb loadbalancer delete
 
 Delete a load balancer
@@ -45,5 +51,5 @@ kubelb loadbalancer delete nginx-loadbalancer --tenant=mytenant --kubeconfig=./k
 
 ### SEE ALSO
 
-* [kubelb loadbalancer](kubelb_loadbalancer.md)	 - Manage KubeLB load balancers
+* [kubelb loadbalancer](../kubelb_loadbalancer)	 - Manage KubeLB load balancers
 

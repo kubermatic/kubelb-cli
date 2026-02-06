@@ -1,3 +1,9 @@
++++
+title = "kubelb loadbalancer"
+date = 2026-02-04T00:00:00+00:00
+weight = 30
++++
+
 ## kubelb loadbalancer
 
 Manage KubeLB load balancers
@@ -27,9 +33,9 @@ Manage KubeLB load balancer configurations
 
 ### SEE ALSO
 
-* [kubelb](kubelb.md)	 - KubeLB CLI - Manage load balancers and create secure tunnels
-* [kubelb loadbalancer create](kubelb_loadbalancer_create.md)	 - Create a load balancer
-* [kubelb loadbalancer delete](kubelb_loadbalancer_delete.md)	 - Delete a load balancer
-* [kubelb loadbalancer get](kubelb_loadbalancer_get.md)	 - Get a load balancer
-* [kubelb loadbalancer list](kubelb_loadbalancer_list.md)	 - List load balancers
+* [kubelb](../kubelb)	 - KubeLB CLI - Manage load balancers and create secure tunnels
+* [kubelb loadbalancer create](../kubelb_loadbalancer_create)	 - Create a load balancer
+* [kubelb loadbalancer delete](../kubelb_loadbalancer_delete)	 - Delete a load balancer
+* [kubelb loadbalancer get](../kubelb_loadbalancer_get)	 - Get a load balancer
+* [kubelb loadbalancer list](../kubelb_loadbalancer_list)	 - List load balancers
 

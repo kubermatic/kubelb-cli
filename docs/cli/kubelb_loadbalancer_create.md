@@ -1,3 +1,9 @@
++++
+title = "kubelb loadbalancer create"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb loadbalancer create
 
 Create a load balancer
@@ -57,5 +63,5 @@ kubelb loadbalancer create my-app --endpoints 10.0.1.1:8080,10.0.1.2:8080 --tena
 
 ### SEE ALSO
 
-* [kubelb loadbalancer](kubelb_loadbalancer.md)	 - Manage KubeLB load balancers
+* [kubelb loadbalancer](../kubelb_loadbalancer)	 - Manage KubeLB load balancers
 

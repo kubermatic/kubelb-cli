@@ -1,3 +1,9 @@
++++
+title = "kubelb status"
+date = 2026-02-04T00:00:00+00:00
+weight = 30
++++
+
 ## kubelb status
 
 Display current status of KubeLB
@@ -38,5 +44,5 @@ kubelb status [flags]
 
 ### SEE ALSO
 
-* [kubelb](kubelb.md)	 - KubeLB CLI - Manage load balancers and create secure tunnels
+* [kubelb](../kubelb)	 - KubeLB CLI - Manage load balancers and create secure tunnels
 

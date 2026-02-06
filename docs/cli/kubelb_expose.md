@@ -1,3 +1,9 @@
++++
+title = "kubelb expose"
+date = 2026-02-04T00:00:00+00:00
+weight = 30
++++
+
 ## kubelb expose
 
 Expose a local port via tunnel
@@ -51,5 +57,5 @@ kubelb expose 8080 --tenant=mytenant
 
 ### SEE ALSO
 
-* [kubelb](kubelb.md)	 - KubeLB CLI - Manage load balancers and create secure tunnels
+* [kubelb](../kubelb)	 - KubeLB CLI - Manage load balancers and create secure tunnels
 

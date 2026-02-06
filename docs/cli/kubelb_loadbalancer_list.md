@@ -1,3 +1,9 @@
++++
+title = "kubelb loadbalancer list"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb loadbalancer list
 
 List load balancers
@@ -38,5 +44,5 @@ kubelb loadbalancer list --tenant=mytenant --kubeconfig=./kubeconfig
 
 ### SEE ALSO
 
-* [kubelb loadbalancer](kubelb_loadbalancer.md)	 - Manage KubeLB load balancers
+* [kubelb loadbalancer](../kubelb_loadbalancer)	 - Manage KubeLB load balancers
 

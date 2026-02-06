@@ -1,3 +1,9 @@
++++
+title = "kubelb tunnel create"
+date = 2026-02-04T00:00:00+00:00
+weight = 50
++++
+
 ## kubelb tunnel create
 
 Create a tunnel
@@ -55,5 +61,5 @@ kubelb tunnel create my-app --port 8080 --tenant=mytenant
 
 ### SEE ALSO
 
-* [kubelb tunnel](kubelb_tunnel.md)	 - Manage secure tunnels to expose local services
+* [kubelb tunnel](../kubelb_tunnel)	 - Manage secure tunnels to expose local services
 

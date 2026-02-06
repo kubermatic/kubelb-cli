@@ -1,3 +1,9 @@
++++
+title = "kubelb version"
+date = 2026-02-04T00:00:00+00:00
+weight = 30
++++
+
 ## kubelb version
 
 Print the version information
@@ -38,5 +44,5 @@ kubelb version
 
 ### SEE ALSO
 
-* [kubelb](kubelb.md)	 - KubeLB CLI - Manage load balancers and create secure tunnels
+* [kubelb](../kubelb)	 - KubeLB CLI - Manage load balancers and create secure tunnels
 
