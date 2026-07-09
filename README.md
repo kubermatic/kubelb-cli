@@ -6,7 +6,11 @@
 # KubeLB CLI
 
 > [!NOTE]
-> **🚧 Beta Software** - This CLI is currently in beta stage and is not yet ready for production use. Features may change as we continue development and gather feedback. Please report any issues you encounter!
+> 
+> ⚠️ This repository has been moved!
+> 
+> The project was transferred to https://github.com/kubermatic/kubelb. CLI now ships with KubeLB releases.
+>
 
 The KubeLB CLI provides tools to manage KubeLB load balancers and create secure tunnels to expose local services through the KubeLB infrastructure(Requires KubeLB Enterprise Edition).
 
